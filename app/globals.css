@@ -10,6 +10,39 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  /* Custom colors for glassmorphism design */
+  --color-sage-100: #d4e8d4;
+  --color-sage-200: #b8d1b8;
+  --color-sage-300: #9cb99c;
+  --color-sage-400: #80a180;
+  --color-sage-500: #648964;
+  --color-sage-600: #4a704a;
+  --color-sage-700: #305730;
+  --color-sage-800: #1e3e1e;
+  --color-sage-900: #0f2a0f;
+  
+  --color-eucalyptus-100: #d1e8d1;
+  --color-eucalyptus-200: #b3d3b3;
+  --color-eucalyptus-300: #95bd95;
+  --color-eucalyptus-400: #78a778;
+  --color-eucalyptus-500: #5b915b;
+  --color-eucalyptus-600: #3e7b3e;
+  --color-eucalyptus-700: #266526;
+  --color-eucalyptus-800: #1a4f1a;
+  --color-eucalyptus-900: #103910;
+  
+  --color-stone-50: #fafaf9;
+  --color-stone-100: #f5f5f4;
+  --color-stone-200: #e7e5e4;
+  --color-stone-300: #d6d3d1;
+  --color-stone-400: #a8a29e;
+  --color-stone-500: #78716c;
+  --color-stone-600: #57534e;
+  --color-stone-700: #44403c;
+  --color-stone-800: #292524;
+  --color-stone-900: #1c1917;
+  --color-stone-950: #0c0a09;
 }
 
 @media (prefers-color-scheme: dark) {
