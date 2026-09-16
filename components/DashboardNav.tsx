@@ -37,10 +37,10 @@ export default function DashboardNav() {
   }
 
   return (
-    <nav className="bg-white/80 backdrop-blur-2xl border-r border-stone-200 w-64 min-h-screen">
+    <nav className="bg-white/5 backdrop-blur-2xl border-r border-white/10 w-64 min-h-screen hidden lg:block">
       <div className="p-6">
-        <h1 className="text-xl font-semibold text-stone-900 tracking-tight">Mindvest</h1>
-        <p className="text-xs font-medium text-stone-500 uppercase tracking-widest mt-1">Diagnostic OS v1.0</p>
+        <h1 className="text-xl font-semibold text-white tracking-tight">Mindvest</h1>
+        <p className="text-xs font-medium text-slate-400 uppercase tracking-widest mt-1">Diagnostic OS v1.0</p>
       </div>
       <div className="px-4 space-y-1">
         {navItems.map((item) => {
@@ -52,22 +52,22 @@ export default function DashboardNav() {
               href={item.href}
               className={`flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all ${
                 isActive
-                  ? 'bg-emerald-100/80 backdrop-blur-xl text-emerald-900'
-                  : 'text-stone-600 hover:bg-stone-100/50'
+                  ? 'bg-emerald-700/90 backdrop-blur-xl text-white border border-emerald-600/50'
+                  : 'text-slate-400 hover:bg-white/10 hover:text-white'
               }`}
             >
-              <Icon className={`mr-3 h-5 w-5 ${isActive ? 'text-emerald-700' : 'text-stone-400'}`} />
+              <Icon className={`mr-3 h-5 w-5 ${isActive ? 'text-white' : 'text-slate-500'}`} />
               {item.name}
             </Link>
           )
         })}
       </div>
-      <div className="absolute bottom-0 left-0 w-64 p-4 border-t border-stone-200">
+      <div className="absolute bottom-0 left-0 w-64 p-4 border-t border-white/10">
         <button
           onClick={handleLogout}
-          className="flex items-center w-full px-4 py-3 text-sm font-medium text-stone-600 hover:bg-stone-100/50 rounded-xl transition-all"
+          className="flex items-center w-full px-4 py-3 text-sm font-medium text-slate-400 hover:bg-white/10 hover:text-white rounded-xl transition-all"
         >
-          <LogOut className="mr-3 h-5 w-5 text-stone-400" />
+          <LogOut className="mr-3 h-5 w-5 text-slate-500" />
           Sign out
         </button>
       </div>

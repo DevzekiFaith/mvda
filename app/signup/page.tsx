@@ -18,25 +18,29 @@ export default function SignupPage() {
     setLoading(true)
     setError('')
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
         },
-      },
-    })
+      })
 
-    if (error) {
-      setError(error.message)
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
+
+      if (data.user) {
+        window.location.href = '/dashboard'
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.')
       setLoading(false)
-      return
-    }
-
-    if (data.user) {
-      router.push('/dashboard')
-      router.refresh()
     }
   }
 

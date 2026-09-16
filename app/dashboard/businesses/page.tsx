@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { Plus, Edit, Trash2, Eye } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import DashboardNav from '@/components/DashboardNav'
 
 interface Business {
   id: string
@@ -131,13 +132,14 @@ export default function BusinessesPage() {
   }
 
   return (
-    <div className="flex bg-gradient-to-br from-sage-100 via-emerald-50 to-eucalyptus-100 min-h-screen">
+    <div className="flex bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
+      <DashboardNav />
       <div className="flex-1 p-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <p className="text-xs font-medium text-emerald-700 uppercase tracking-widest mb-2">Business Management</p>
-            <h1 className="text-3xl font-semibold text-stone-900 tracking-tight">Businesses</h1>
-            <p className="text-stone-600 mt-2">Manage client businesses</p>
+            <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-2">Business Management</p>
+            <h1 className="text-3xl font-semibold text-white tracking-tight">Businesses</h1>
+            <p className="text-slate-400 mt-2">Manage client businesses</p>
           </div>
           <button
             onClick={() => {
@@ -161,47 +163,47 @@ export default function BusinessesPage() {
           </button>
         </div>
 
-        <div className="bg-white/80 backdrop-blur-2xl rounded-2xl border border-white/50 shadow-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-stone-200/50">
-            <thead className="bg-stone-50/50 backdrop-blur-xl">
+        <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-white/10">
+            <thead className="bg-white/5 backdrop-blur-xl">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-widest">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
                   Business Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-widest">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
                   Industry
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-widest">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
                   Stage
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-widest">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-stone-500 uppercase tracking-widest">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
                   Actions
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white/60 backdrop-blur-xl divide-y divide-stone-200/50">
+            <tbody className="bg-white/5 backdrop-blur-xl divide-y divide-white/10">
               {businesses.map((business) => (
                 <tr key={business.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-stone-900">{business.business_name}</div>
+                    <div className="text-sm font-medium text-white">{business.business_name}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-stone-500">{business.industry || '-'}</div>
+                    <div className="text-sm text-slate-400">{business.industry || '-'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100/80 backdrop-blur-xl text-emerald-900">
+                    <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-500/20 backdrop-blur-xl text-emerald-400">
                       {business.business_stage || '-'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full backdrop-blur-xl ${
-                      business.status === 'lead' ? 'bg-stone-100/80 text-stone-900' :
-                      business.status === 'diagnosing' ? 'bg-amber-100/80 text-amber-900' :
-                      business.status === 'diagnosis_complete' ? 'bg-emerald-100/80 text-emerald-900' :
-                      'bg-blue-100/80 text-blue-900'
+                      business.status === 'lead' ? 'bg-slate-500/20 text-slate-400' :
+                      business.status === 'diagnosing' ? 'bg-amber-500/20 text-amber-400' :
+                      business.status === 'diagnosis_complete' ? 'bg-emerald-500/20 text-emerald-400' :
+                      'bg-blue-500/20 text-blue-400'
                     }`}>
                       {business.status}
                     </span>
@@ -209,21 +211,21 @@ export default function BusinessesPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                     <button
                       onClick={() => startDiagnosis(business.id)}
-                      className="text-emerald-600 hover:text-emerald-900 transition-colors"
+                      className="text-emerald-400 hover:text-emerald-300 transition-colors"
                       title="Start Diagnosis"
                     >
                       <Eye className="h-5 w-5" />
                     </button>
                     <button
                       onClick={() => handleEdit(business)}
-                      className="text-stone-600 hover:text-stone-900 transition-colors"
+                      className="text-slate-400 hover:text-white transition-colors"
                       title="Edit"
                     >
                       <Edit className="h-5 w-5" />
                     </button>
                     <button
                       onClick={() => handleDelete(business.id)}
-                      className="text-red-600 hover:text-red-900 transition-colors"
+                      className="text-red-400 hover:text-red-300 transition-colors"
                       title="Delete"
                     >
                       <Trash2 className="h-5 w-5" />
@@ -233,7 +235,7 @@ export default function BusinessesPage() {
               ))}
               {businesses.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-stone-500">
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
                     No businesses added yet. Click "Add Business" to get started.
                   </td>
                 </tr>
@@ -243,15 +245,15 @@ export default function BusinessesPage() {
         </div>
 
         {showModal && (
-          <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-xl flex items-center justify-center z-50">
-            <div className="bg-white/90 backdrop-blur-2xl rounded-3xl border border-white/50 shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xl flex items-center justify-center z-50">
+            <div className="bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="p-8">
-                <h2 className="text-xl font-semibold text-stone-900 tracking-tight mb-6">
+                <h2 className="text-xl font-semibold text-white tracking-tight mb-6">
                   {editingBusiness ? 'Edit Business' : 'Add New Business'}
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Business Name *
                     </label>
                     <input
@@ -259,61 +261,61 @@ export default function BusinessesPage() {
                       required
                       value={formData.business_name}
                       onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Industry
                     </label>
                     <input
                       type="text"
                       value={formData.industry}
                       onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Location
                     </label>
                     <input
                       type="text"
                       value={formData.location}
                       onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Website
                     </label>
                     <input
                       type="url"
                       value={formData.website}
                       onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Founder Contact
                     </label>
                     <input
                       type="email"
                       value={formData.founder_contact}
                       onChange={(e) => setFormData({ ...formData, founder_contact: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Business Stage
                     </label>
                     <select
                       value={formData.business_stage}
                       onChange={(e) => setFormData({ ...formData, business_stage: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white transition-all"
                     >
                       <option value="startup">Startup</option>
                       <option value="growth">Growth</option>
@@ -322,24 +324,24 @@ export default function BusinessesPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Team Size
                     </label>
                     <input
                       type="number"
                       value={formData.team_size}
                       onChange={(e) => setFormData({ ...formData, team_size: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
+                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
                       Revenue Range
                     </label>
                     <select
                       value={formData.revenue_range}
                       onChange={(e) => setFormData({ ...formData, revenue_range: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 transition-all"
+                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white transition-all"
                     >
                       <option value="0-100k">$0 - $100k</option>
                       <option value="100k-500k">$100k - $500k</option>
@@ -352,7 +354,7 @@ export default function BusinessesPage() {
                     <button
                       type="button"
                       onClick={() => setShowModal(false)}
-                      className="flex-1 px-6 py-3 bg-stone-100/80 backdrop-blur-xl border border-stone-200 text-stone-900 rounded-xl hover:bg-stone-200 transition-all"
+                      className="flex-1 px-6 py-3 bg-white/10 backdrop-blur-xl border border-white/20 text-white rounded-xl hover:bg-white/20 transition-all"
                     >
                       Cancel
                     </button>
