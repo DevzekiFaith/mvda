@@ -117,13 +117,18 @@ export async function POST(request: Request) {
     }
 
     if (insertRes.error) {
+      let hint: string | undefined = undefined
+      if (insertRes.error.code === '42501') {
+        hint = 'Row Level Security (RLS) is blocking inserts. Please run supabase/setup_complete.sql in your Supabase SQL Editor.'
+      } else if (insertRes.error.message?.includes('schema cache') || insertRes.error.code === 'PGRST205') {
+        hint = 'The database tables have not been created in Supabase yet. Please run the script in supabase/setup_complete.sql in your Supabase SQL Editor.'
+      }
+
       return NextResponse.json(
         { 
           error: insertRes.error.message, 
           code: insertRes.error.code,
-          hint: insertRes.error.code === '42501' 
-            ? 'Row Level Security (RLS) is blocking inserts. Please run the SQL in supabase/fix_rls_policies.sql in your Supabase SQL Editor.' 
-            : undefined
+          hint
         }, 
         { status: 400 }
       )
