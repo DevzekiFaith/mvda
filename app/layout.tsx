@@ -13,17 +13,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Mindvest Diagnostic OS",
-  description: "A structured diagnostic framework for identifying business constraints, designing interventions, and tracking measurable outcomes.",
+  title: "Mindvest Diagnostic OS — Architectural Business Diagnostics",
+  description: "Diagnose constraints, engineer high-leverage interventions, and measure verifiable business transformations with mathematical rigor.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}</body>
+      <body className="min-h-full flex flex-col bg-[#090a0f] text-[#f4f4f6] selection:bg-[#ff5722] selection:text-white" suppressHydrationWarning>
+        {children}
+      </body>
     </html>
   );
 }

@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Plus, Edit, Trash2, Eye } from 'lucide-react'
+import { Plus, Edit2, Trash2, Stethoscope, Search, Globe, MapPin, Users, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import DashboardNav from '@/components/DashboardNav'
 
 interface Business {
   id: string
   business_name: string
   industry: string
   location: string
+  website?: string
+  founder_contact?: string
   business_stage: string
   team_size: number
+  revenue_range?: string
   status: string
   created_at: string
 }
@@ -22,6 +24,7 @@ export default function BusinessesPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -31,12 +34,23 @@ export default function BusinessesPage() {
     website: '',
     founder_contact: '',
     business_stage: 'startup',
-    team_size: 0,
+    team_size: 1,
     revenue_range: '0-100k',
   })
 
   useEffect(() => {
     fetchBusinesses()
+
+    const channel = supabase
+      .channel('businesses-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'businesses' }, () => {
+        fetchBusinesses()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const fetchBusinesses = async () => {
@@ -56,10 +70,15 @@ export default function BusinessesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    const { data: { user } } = await supabase.auth.getUser()
+
     if (editingBusiness) {
       const { error } = await supabase
         .from('businesses')
-        .update(formData)
+        .update({
+          ...formData,
+          team_size: Number(formData.team_size),
+        })
         .eq('id', editingBusiness.id)
 
       if (error) {
@@ -69,7 +88,12 @@ export default function BusinessesPage() {
     } else {
       const { error } = await supabase
         .from('businesses')
-        .insert([{ ...formData, status: 'lead' }])
+        .insert([{ 
+          ...formData, 
+          team_size: Number(formData.team_size),
+          assigned_consultant_id: user?.id || null,
+          status: 'intake' 
+        }])
 
       if (error) {
         console.error('Error creating business:', error)
@@ -86,7 +110,7 @@ export default function BusinessesPage() {
       website: '',
       founder_contact: '',
       business_stage: 'startup',
-      team_size: 0,
+      team_size: 1,
       revenue_range: '0-100k',
     })
     fetchBusinesses()
@@ -98,17 +122,17 @@ export default function BusinessesPage() {
       business_name: business.business_name,
       industry: business.industry || '',
       location: business.location || '',
-      website: '',
-      founder_contact: '',
+      website: business.website || '',
+      founder_contact: business.founder_contact || '',
       business_stage: business.business_stage || 'startup',
-      team_size: business.team_size || 0,
-      revenue_range: '0-100k',
+      team_size: business.team_size || 1,
+      revenue_range: business.revenue_range || '0-100k',
     })
     setShowModal(true)
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this business?')) return
+    if (!confirm('Are you sure you want to remove this client profile?')) return
 
     const { error } = await supabase
       .from('businesses')
@@ -123,254 +147,296 @@ export default function BusinessesPage() {
     fetchBusinesses()
   }
 
-  const startDiagnosis = (businessId: string) => {
-    router.push(`/dashboard/diagnoses/new?businessId=${businessId}`)
-  }
-
-  if (loading) {
-    return <div className="p-8">Loading...</div>
-  }
+  const filteredBusinesses = businesses.filter(b => 
+    b.business_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (b.industry && b.industry.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (b.location && b.location.toLowerCase().includes(searchTerm.toLowerCase()))
+  )
 
   return (
-    <div className="flex bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
-      <DashboardNav />
-      <div className="flex-1 p-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-2">Business Management</p>
-            <h1 className="text-3xl font-semibold text-white tracking-tight">Businesses</h1>
-            <p className="text-slate-400 mt-2">Manage client businesses</p>
+    <div className="p-6 lg:p-10 max-w-7xl mx-auto w-full space-y-8">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              Client Directory
+            </span>
           </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Client Businesses
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+            Profiles, organizational sizes, revenue benchmarks, and diagnostic engagements.
+          </p>
+        </div>
+
+        <button
+          onClick={() => {
+            setEditingBusiness(null)
+            setFormData({
+              business_name: '',
+              industry: '',
+              location: '',
+              website: '',
+              founder_contact: '',
+              business_stage: 'startup',
+              team_size: 1,
+              revenue_range: '0-100k',
+            })
+            setShowModal(true)
+          }}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ff6a38] to-[#ff5722] text-white text-xs font-semibold shadow-[0_3px_15px_rgba(255,87,34,0.35)] hover:shadow-[0_5px_20px_rgba(255,87,34,0.5)] transition-all cursor-pointer"
+        >
+          <Plus className="h-4 w-4" />
+          <span>Register Business</span>
+        </button>
+      </div>
+
+      {/* Filter / Search Bar */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Filter by business name, industry, or city..."
+          className="w-full pl-10 pr-4 py-2.5 bg-[#10121a] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-[#ff5722]/50 transition-all font-sans"
+        />
+      </div>
+
+      {/* Businesses Grid */}
+      {loading ? (
+        <div className="p-12 text-center text-xs font-mono text-zinc-500">Loading business registry...</div>
+      ) : filteredBusinesses.length === 0 ? (
+        <div className="p-12 text-center bg-[#10121a]/80 rounded-2xl border border-white/[0.07] space-y-3">
+          <p className="text-xs text-zinc-400">No client businesses matching your search.</p>
           <button
-            onClick={() => {
-              setEditingBusiness(null)
-              setFormData({
-                business_name: '',
-                industry: '',
-                location: '',
-                website: '',
-                founder_contact: '',
-                business_stage: 'startup',
-                team_size: 0,
-                revenue_range: '0-100k',
-              })
-              setShowModal(true)
-            }}
-            className="flex items-center px-6 py-3 bg-emerald-700/90 backdrop-blur-xl text-white rounded-2xl border border-emerald-600/50 shadow-lg hover:bg-emerald-800 transition-all"
+            onClick={() => setShowModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium bg-[#ff5722] text-white"
           >
-            <Plus className="mr-2 h-5 w-5" />
-            Add Business
+            <Plus className="h-3.5 w-3.5" />
+            <span>Add First Client</span>
           </button>
         </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredBusinesses.map((business) => (
+            <div
+              key={business.id}
+              className="p-6 rounded-2xl bg-[#10121a]/90 hover:bg-[#131622] border border-white/[0.07] hover:border-[#ff5722]/30 transition-all duration-300 flex flex-col justify-between group shadow-sm"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-white group-hover:text-[#ff5722] transition-colors">
+                      {business.business_name}
+                    </h3>
+                    <span className="text-[11px] font-mono text-zinc-400">{business.industry || 'General Industry'}</span>
+                  </div>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/[0.05] border border-white/[0.08] text-zinc-300">
+                    {business.business_stage || 'Startup'}
+                  </span>
+                </div>
 
-        <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-white/10">
-            <thead className="bg-white/5 backdrop-blur-xl">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                  Business Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                  Industry
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                  Stage
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white/5 backdrop-blur-xl divide-y divide-white/10">
-              {businesses.map((business) => (
-                <tr key={business.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-white">{business.business_name}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm text-slate-400">{business.industry || '-'}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-500/20 backdrop-blur-xl text-emerald-400">
-                      {business.business_stage || '-'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full backdrop-blur-xl ${
-                      business.status === 'lead' ? 'bg-slate-500/20 text-slate-400' :
-                      business.status === 'diagnosing' ? 'bg-amber-500/20 text-amber-400' :
-                      business.status === 'diagnosis_complete' ? 'bg-emerald-500/20 text-emerald-400' :
-                      'bg-blue-500/20 text-blue-400'
-                    }`}>
-                      {business.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                    <button
-                      onClick={() => startDiagnosis(business.id)}
-                      className="text-emerald-400 hover:text-emerald-300 transition-colors"
-                      title="Start Diagnosis"
-                    >
-                      <Eye className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => handleEdit(business)}
-                      className="text-slate-400 hover:text-white transition-colors"
-                      title="Edit"
-                    >
-                      <Edit className="h-5 w-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(business.id)}
-                      className="text-red-400 hover:text-red-300 transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {businesses.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
-                    No businesses added yet. Click "Add Business" to get started.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                <div className="space-y-1.5 text-xs text-zinc-400 font-light mt-4 mb-6">
+                  {business.location && (
+                    <div className="flex items-center gap-2 text-zinc-400">
+                      <MapPin className="h-3.5 w-3.5 text-zinc-500" />
+                      <span>{business.location}</span>
+                    </div>
+                  )}
+                  {business.team_size > 0 && (
+                    <div className="flex items-center gap-2 text-zinc-400">
+                      <Users className="h-3.5 w-3.5 text-zinc-500" />
+                      <span>{business.team_size} team members</span>
+                    </div>
+                  )}
+                  {business.website && (
+                    <div className="flex items-center gap-2 text-zinc-400 truncate">
+                      <Globe className="h-3.5 w-3.5 text-zinc-500" />
+                      <span className="truncate">{business.website}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
 
-        {showModal && (
-          <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-xl flex items-center justify-center z-50">
-            <div className="bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-              <div className="p-8">
-                <h2 className="text-xl font-semibold text-white tracking-tight mb-6">
-                  {editingBusiness ? 'Edit Business' : 'Add New Business'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Business Name *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.business_name}
-                      onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Industry
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.industry}
-                      onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Location
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.location}
-                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Website
-                    </label>
-                    <input
-                      type="url"
-                      value={formData.website}
-                      onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Founder Contact
-                    </label>
-                    <input
-                      type="email"
-                      value={formData.founder_contact}
-                      onChange={(e) => setFormData({ ...formData, founder_contact: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Business Stage
-                    </label>
-                    <select
-                      value={formData.business_stage}
-                      onChange={(e) => setFormData({ ...formData, business_stage: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white transition-all"
-                    >
-                      <option value="startup">Startup</option>
-                      <option value="growth">Growth</option>
-                      <option value="mature">Mature</option>
-                      <option value="decline">Decline</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Team Size
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.team_size}
-                      onChange={(e) => setFormData({ ...formData, team_size: parseInt(e.target.value) || 0 })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white placeholder-slate-500 transition-all"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                      Revenue Range
-                    </label>
-                    <select
-                      value={formData.revenue_range}
-                      onChange={(e) => setFormData({ ...formData, revenue_range: e.target.value })}
-                      className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-white transition-all"
-                    >
-                      <option value="0-100k">$0 - $100k</option>
-                      <option value="100k-500k">$100k - $500k</option>
-                      <option value="500k-1m">$500k - $1M</option>
-                      <option value="1m-5m">$1M - $5M</option>
-                      <option value="5m+">$5M+</option>
-                    </select>
-                  </div>
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowModal(false)}
-                      className="flex-1 px-6 py-3 bg-white/10 backdrop-blur-xl border border-white/20 text-white rounded-xl hover:bg-white/20 transition-all"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="flex-1 px-6 py-3 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 transition-all shadow-lg shadow-emerald-700/20"
-                    >
-                      {editingBusiness ? 'Update' : 'Add'} Business
-                    </button>
-                  </div>
-                </form>
+              <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between gap-2">
+                <button
+                  onClick={() => router.push(`/dashboard/diagnoses/new?businessId=${business.id}`)}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-[#ff5722]/10 hover:bg-[#ff5722] text-[#ff5722] hover:text-white border border-[#ff5722]/30 hover:border-[#ff5722] transition-all"
+                >
+                  <Stethoscope className="h-3.5 w-3.5" />
+                  <span>Diagnose</span>
+                </button>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => handleEdit(business)}
+                    className="p-2 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] transition-colors"
+                    title="Edit Details"
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(business.id)}
+                    className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal Dialog */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#10121a] border border-white/[0.1] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative">
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute top-6 right-6 p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.05]"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="mb-6">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-[#ff5722]">
+                {editingBusiness ? 'Update Record' : 'New Enrollment'}
+              </span>
+              <h2 className="text-xl font-bold text-white mt-1">
+                {editingBusiness ? 'Edit Client Business' : 'Register Client Business'}
+              </h2>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5">
+                  Business Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.business_name}
+                  onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
+                  placeholder="Apex Robotics Ltd"
+                  className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#ff5722]/50"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Industry
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.industry}
+                    onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+                    placeholder="SaaS / Logistics"
+                    className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white placeholder-zinc-600 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    placeholder="London, UK"
+                    className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white placeholder-zinc-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Stage
+                  </label>
+                  <select
+                    value={formData.business_stage}
+                    onChange={(e) => setFormData({ ...formData, business_stage: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#141722] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white focus:outline-none"
+                  >
+                    <option value="idea">Idea</option>
+                    <option value="startup">Startup</option>
+                    <option value="growth">Growth</option>
+                    <option value="mature">Mature</option>
+                    <option value="declining">Declining</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Team Size
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={formData.team_size}
+                    onChange={(e) => setFormData({ ...formData, team_size: parseInt(e.target.value) || 1 })}
+                    className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Revenue Range
+                  </label>
+                  <select
+                    value={formData.revenue_range}
+                    onChange={(e) => setFormData({ ...formData, revenue_range: e.target.value })}
+                    className="w-full px-3.5 py-2.5 bg-[#141722] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white focus:outline-none"
+                  >
+                    <option value="0-100k">0 - 100k</option>
+                    <option value="100k-500k">100k - 500k</option>
+                    <option value="500k-1m">500k - 1M</option>
+                    <option value="1m-5m">1M - 5M</option>
+                    <option value="5m-10m">5M - 10M</option>
+                    <option value="10m+">10M+</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1.5">
+                    Website (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.website}
+                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                    placeholder="https://apex.com"
+                    className="w-full px-3.5 py-2.5 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-xs text-white placeholder-zinc-600 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-zinc-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-[#ff5722] hover:bg-[#ff6e3a] text-white text-xs font-semibold shadow-sm"
+                >
+                  {editingBusiness ? 'Save Changes' : 'Enroll Business'}
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

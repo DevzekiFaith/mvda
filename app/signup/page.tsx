@@ -4,144 +4,246 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowRight, Eye, EyeOff, Lock, Mail, User as UserIcon, CheckCircle2 } from 'lucide-react'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const router = useRouter()
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setSuccessMessage('')
 
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email,
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
         password,
         options: {
           data: {
-            full_name: fullName,
+            full_name: fullName.trim(),
           },
         },
       })
 
-      if (error) {
-        setError(error.message)
+      if (signUpError) {
+        setError(signUpError.message)
         setLoading(false)
         return
       }
 
-      if (data.user) {
+      if (data.session) {
+        // Automatically sync to public.users
+        try {
+          await supabase.from('users').upsert({
+            id: data.user?.id,
+            email: email.trim(),
+            full_name: fullName.trim(),
+            role: 'consultant',
+          })
+        } catch (_) {}
+
         window.location.href = '/dashboard'
+      } else if (data.user) {
+        setSuccessMessage('Account created! Please check your email to verify your address, then sign in.')
+        setLoading(false)
       }
-    } catch (err) {
-      setError('An unexpected error occurred. Please try again.')
+    } catch (err: any) {
+      setError(err?.message || 'An unexpected error occurred. Please try again.')
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-sage-100 via-emerald-50 to-eucalyptus-100 relative overflow-hidden flex items-center justify-center">
-      {/* Floating decorative spheres */}
-      <div className="absolute top-20 left-20 w-32 h-32 rounded-full bg-gradient-to-br from-stone-200 to-stone-300 opacity-60 blur-sm"></div>
-      <div className="absolute top-40 right-32 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-200 to-emerald-300 opacity-40 blur-sm"></div>
-      <div className="absolute bottom-40 left-40 w-20 h-20 rounded-full bg-gradient-to-br from-stone-300 to-stone-400 opacity-50 blur-sm"></div>
-      <div className="absolute top-60 right-60 w-16 h-16 rounded-full bg-gradient-to-br from-emerald-300 to-emerald-400 opacity-30 blur-sm"></div>
+    <div className="min-h-screen bg-[#090a0f] text-[#f4f4f6] relative flex items-center justify-center p-4 overflow-hidden antialiased">
+      {/* Background Ambience & Minimalist Ring Motif */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] pointer-events-none">
+        <div className="absolute top-1/4 right-10 w-72 h-72 rounded-full border-[14px] border-[#ff5722]/30 blur-[2px] opacity-70 animate-pulse" />
+        <div className="absolute top-1/3 left-10 w-96 h-96 rounded-full bg-[#ff5722]/10 blur-[120px] pointer-events-none" />
+      </div>
 
-      {/* Glassmorphism signup panel */}
-      <div className="relative z-10 w-full max-w-md mx-4">
-        <div className="bg-white/80 backdrop-blur-2xl rounded-3xl border border-white/50 shadow-2xl p-8 md:p-12">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-semibold text-stone-900 tracking-tight mb-2">Mindvest</h1>
-            <span className="text-xs font-medium text-stone-500 uppercase tracking-widest">Diagnostic OS</span>
-          </div>
+      <div 
+        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)',
+          backgroundSize: '32px 32px'
+        }}
+      />
 
-          <div className="mb-8">
-            <p className="text-xs font-medium text-emerald-700 uppercase tracking-widest mb-2">Create Account</p>
-            <p className="text-stone-600 text-sm">Join the diagnostic platform</p>
-          </div>
-
-          <form className="space-y-6" onSubmit={handleSignup}>
-            {error && (
-              <div className="bg-red-50/80 backdrop-blur-xl border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
-                {error}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="fullName" className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Full Name
-                </label>
-                <input
-                  id="fullName"
-                  name="fullName"
-                  type="text"
-                  required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                  placeholder="John Doe"
-                />
-              </div>
-              <div>
-                <label htmlFor="email" className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Email
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                  placeholder="your@email.com"
-                />
-              </div>
-              <div>
-                <label htmlFor="password" className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Password
-                </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                  placeholder="••••••••"
-                />
-                <p className="mt-2 text-xs text-stone-500">Minimum 6 characters</p>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-emerald-700 text-white py-4 rounded-xl font-medium hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 transition-all shadow-lg shadow-emerald-700/20"
-            >
-              {loading ? 'Creating account...' : 'Sign Up'}
-            </button>
-
-            <div className="text-center pt-4">
-              <Link href="/login" className="text-sm text-stone-600 hover:text-stone-900 transition-colors">
-                Already have an account? <span className="font-medium">Sign in</span>
-              </Link>
-            </div>
-          </form>
+      <div className="relative z-10 w-full max-w-[440px]">
+        {/* Brand header */}
+        <div className="flex items-center justify-between mb-8 px-2">
+          <Link href="/" className="flex items-center gap-2 group">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#ff5722] shadow-[0_0_12px_#ff5722]" />
+            <span className="text-lg font-bold tracking-wider text-white">
+              MINDVEST<span className="text-[#ff5722]">.</span>
+            </span>
+          </Link>
+          <span className="text-[11px] font-mono tracking-[0.2em] uppercase text-zinc-500 bg-white/[0.04] px-2.5 py-1 rounded-full border border-white/[0.06]">
+            Consultant Onboarding
+          </span>
         </div>
 
-        {/* Back to home */}
+        {/* Minimalist Glass Card */}
+        <div className="bg-[#10121a]/90 backdrop-blur-2xl rounded-3xl border border-white/[0.08] shadow-[0_20px_50px_rgba(0,0,0,0.6)] p-8 md:p-10 relative overflow-hidden">
+          <div className="absolute top-0 left-10 right-10 h-[1px] bg-gradient-to-r from-transparent via-[#ff5722]/40 to-transparent" />
+
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-white mb-2">
+              Create Account
+            </h1>
+            <p className="text-xs text-zinc-400 font-light leading-relaxed">
+              Register as an accredited consultant to initiate enterprise business diagnoses.
+            </p>
+          </div>
+
+          {error && (
+            <div className="mb-6 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 mt-1.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="mb-6 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-start gap-3">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-white mb-1">Registration Complete</p>
+                <p>{successMessage}</p>
+                <Link href="/login" className="inline-block mt-3 text-xs font-semibold text-[#ff5722] hover:underline">
+                  Proceed to Sign In →
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {!successMessage && (
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div>
+                <label 
+                  htmlFor="fullName" 
+                  className="block text-[11px] font-mono uppercase tracking-[0.18em] text-zinc-400 mb-2"
+                >
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
+                    <UserIcon className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="fullName"
+                    name="fullName"
+                    type="text"
+                    required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Marcus Sterling"
+                    className="w-full pl-10 pr-4 py-3 bg-white/[0.03] hover:bg-white/[0.05] focus:bg-white/[0.07] border border-white/[0.08] focus:border-[#ff5722]/70 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#ff5722]/50 transition-all font-sans"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label 
+                  htmlFor="email" 
+                  className="block text-[11px] font-mono uppercase tracking-[0.18em] text-zinc-400 mb-2"
+                >
+                  Work Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="consultant@mindvest.com"
+                    className="w-full pl-10 pr-4 py-3 bg-white/[0.03] hover:bg-white/[0.05] focus:bg-white/[0.07] border border-white/[0.08] focus:border-[#ff5722]/70 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#ff5722]/50 transition-all font-sans"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label 
+                  htmlFor="password" 
+                  className="block text-[11px] font-mono uppercase tracking-[0.18em] text-zinc-400 mb-2"
+                >
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
+                    <Lock className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    required
+                    minLength={6}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Minimum 6 characters"
+                    className="w-full pl-10 pr-11 py-3 bg-white/[0.03] hover:bg-white/[0.05] focus:bg-white/[0.07] border border-white/[0.08] focus:border-[#ff5722]/70 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#ff5722]/50 transition-all font-sans"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-500 hover:text-zinc-300 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl font-medium text-xs tracking-wider uppercase bg-gradient-to-r from-[#ff6a38] to-[#ff5722] hover:from-[#ff7a4d] hover:to-[#ff6433] text-white shadow-[0_4px_25px_rgba(255,87,34,0.35)] hover:shadow-[0_6px_30px_rgba(255,87,34,0.5)] border border-white/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer mt-4"
+              >
+                {loading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <span>Create Consultant ID</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+
+          <div className="mt-8 pt-6 border-t border-white/[0.06] text-center">
+            <p className="text-xs text-zinc-400">
+              Already registered?{' '}
+              <Link 
+                href="/login" 
+                className="text-[#ff5722] hover:text-[#ff7844] font-medium transition-colors ml-1"
+              >
+                Sign In
+              </Link>
+            </p>
+          </div>
+        </div>
+
         <div className="text-center mt-6">
-          <Link href="/" className="text-xs text-stone-500 hover:text-stone-700 transition-colors uppercase tracking-widest">
-            ← Back to Home
+          <Link 
+            href="/" 
+            className="text-[11px] font-mono uppercase tracking-[0.2em] text-zinc-500 hover:text-zinc-300 transition-colors inline-flex items-center gap-2"
+          >
+            <span>←</span> Back to Mindvest
           </Link>
         </div>
       </div>

@@ -34,7 +34,7 @@ export default function FinancialDashboard({ businessId, sessionId }: { business
       query = query.eq('business_id', businessId).order('recorded_at', { ascending: false }).limit(1)
     }
 
-    const { data } = await query.single()
+    const { data } = await query.maybeSingle()
     
     if (data) {
       setMetrics(data)
@@ -43,15 +43,17 @@ export default function FinancialDashboard({ businessId, sessionId }: { business
   }
 
   if (loading) {
-    return <div className="p-6">Loading financial data...</div>
+    return <div className="p-8 text-center text-xs font-mono text-zinc-500">Evaluating financial metrics...</div>
   }
 
   if (!metrics) {
     return (
-      <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <div className="flex items-center">
-          <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-          <span className="text-yellow-800">No financial data available. Please complete the diagnostic questionnaire.</span>
+      <div className="p-6 bg-[#10121a] border border-white/[0.08] rounded-2xl">
+        <div className="flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-amber-400 shrink-0" />
+          <span className="text-xs text-zinc-300">
+            No quantitative financial metrics recorded for this session yet. Complete the Financial Engine questions to generate telemetry.
+          </span>
         </div>
       </div>
     )
@@ -99,109 +101,54 @@ export default function FinancialDashboard({ businessId, sessionId }: { business
       icon: DollarSign,
       trend: metrics.cash_balance > 0 ? 'positive' : 'negative',
     },
-    {
-      title: 'Average Transaction Value',
-      value: formatCurrency(metrics.average_transaction_value),
-      icon: null,
-      trend: null,
-    },
-    {
-      title: 'Customer Acquisition Cost',
-      value: formatCurrency(metrics.customer_acquisition_cost),
-      icon: null,
-      trend: null,
-    },
-    {
-      title: 'Break-even Revenue',
-      value: formatCurrency(breakEvenRevenue),
-      icon: AlertCircle,
-      trend: metrics.monthly_revenue >= breakEvenRevenue ? 'positive' : 'negative',
-    },
   ]
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {financialCards.map((card, index) => (
-          <div key={index} className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">{card.title}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-2">{card.value}</p>
-              </div>
-              {card.icon && (
-                <div className={`p-3 rounded-full ${
-                  card.trend === 'positive' ? 'bg-green-100' :
-                  card.trend === 'negative' ? 'bg-red-100' :
-                  'bg-gray-100'
-                }`}>
-                  <card.icon className={`h-6 w-6 ${
-                    card.trend === 'positive' ? 'text-green-600' :
-                    card.trend === 'negative' ? 'text-red-600' :
-                    'text-gray-600'
-                  }`} />
-                </div>
-              )}
+          <div
+            key={index}
+            className="p-5 rounded-2xl bg-[#10121a]/90 border border-white/[0.07] flex flex-col justify-between"
+          >
+            <div>
+              <p className="text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-1">{card.title}</p>
+              <p className="text-2xl font-bold font-mono text-white mt-1">{card.value}</p>
             </div>
+            {card.trend && (
+              <div className="mt-3 flex items-center gap-1.5 text-xs font-mono">
+                <span className={card.trend === 'positive' ? 'text-emerald-400' : 'text-red-400'}>
+                  {card.trend === 'positive' ? '● Healthy Range' : '▲ Below Target'}
+                </span>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Financial Health Indicators</h3>
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-700">Profitability Status</span>
-            <span className={`font-medium ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {netProfit >= 0 ? 'Profitable' : 'Operating at Loss'}
+      <div className="p-6 rounded-3xl bg-[#10121a]/90 border border-white/[0.08] space-y-4">
+        <h3 className="text-sm font-bold font-mono uppercase tracking-wider text-white">Financial Health Diagnostics</h3>
+        <div className="space-y-3 text-xs font-mono">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
+            <span className="text-zinc-400">Profitability Engine</span>
+            <span className={netProfit >= 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+              {netProfit >= 0 ? 'Profitable' : 'Operating at Burn Loss'}
             </span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-700">Gross Margin Health</span>
-            <span className={`font-medium ${grossMargin >= 30 ? 'text-green-600' : grossMargin >= 20 ? 'text-yellow-600' : 'text-red-600'}`}>
-              {grossMargin >= 30 ? 'Healthy' : grossMargin >= 20 ? 'Moderate' : 'Critical'}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
+            <span className="text-zinc-400">Gross Margin Buffer</span>
+            <span className={grossMargin >= 30 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+              {grossMargin >= 30 ? 'Strong (>30%)' : 'Compressed Margin'}
             </span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-700">Cash Position</span>
-            <span className={`font-medium ${metrics.cash_balance > metrics.monthly_operating_costs * 3 ? 'text-green-600' : metrics.cash_balance > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-              {metrics.cash_balance > metrics.monthly_operating_costs * 3 ? 'Strong' : metrics.cash_balance > 0 ? 'Adequate' : 'Critical'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-gray-700">Break-even Status</span>
-            <span className={`font-medium ${metrics.monthly_revenue >= breakEvenRevenue ? 'text-green-600' : 'text-red-600'}`}>
-              {metrics.monthly_revenue >= breakEvenRevenue ? 'Above Break-even' : 'Below Break-even'}
+          <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02]">
+            <span className="text-zinc-400">Break-even Threshold</span>
+            <span className={metrics.monthly_revenue >= breakEvenRevenue ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+              {metrics.monthly_revenue >= breakEvenRevenue ? 'Cleared' : 'Deficit'}
             </span>
           </div>
         </div>
       </div>
-
-      {(metrics.receivables > 0 || metrics.payables > 0 || metrics.debt > 0) && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Balance Sheet Items</h3>
-          <div className="space-y-3">
-            {metrics.receivables > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-700">Receivables</span>
-                <span className="font-medium text-gray-900">{formatCurrency(metrics.receivables)}</span>
-              </div>
-            )}
-            {metrics.payables > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-700">Payables</span>
-                <span className="font-medium text-gray-900">{formatCurrency(metrics.payables)}</span>
-              </div>
-            )}
-            {metrics.debt > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-gray-700">Outstanding Debt</span>
-                <span className="font-medium text-red-600">{formatCurrency(metrics.debt)}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

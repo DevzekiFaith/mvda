@@ -1,411 +1,363 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import DashboardNav from '@/components/DashboardNav'
+import { supabase } from '@/lib/supabase/client'
+import Link from 'next/link'
 import { 
-  Box, 
-  BarChart3, 
-  Zap, 
+  Building2, 
+  Stethoscope, 
+  AlertTriangle, 
+  Wrench, 
+  ArrowRight, 
+  Plus, 
   TrendingUp, 
-  Settings, 
-  Calendar,
-  Clock,
-  Activity,
-  Target,
+  Clock, 
+  CheckCircle2, 
   Flame,
-  CheckCircle2,
-  Circle,
-  Home,
-  Search,
-  User,
-  Menu
+  FileText,
+  Activity,
+  Layers,
+  ChevronRight
 } from 'lucide-react'
 
 export default function DashboardPage() {
-  const [selectedMonth, setSelectedMonth] = useState('Май 2025')
-  const [isMobile, setIsMobile] = useState(false)
-  const [gradientId, setGradientId] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    businessCount: 0,
+    sessionCount: 0,
+    constraintCount: 0,
+    interventionCount: 0,
+  })
+  const [recentSessions, setRecentSessions] = useState<any[]>([])
+  const [topConstraints, setTopConstraints] = useState<any[]>([])
+  const [pendingInterventions, setPendingInterventions] = useState<any[]>([])
+
+  const [isLive, setIsLive] = useState(true)
 
   useEffect(() => {
-    // Generate unique gradient IDs to avoid conflicts
-    setGradientId(`gradient-${Math.random().toString(36).substr(2, 9)}`)
-    
+    fetchDashboardData()
+
+    const channel = supabase
+      .channel('dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'businesses' }, () => {
+        fetchDashboardData()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'diagnostic_sessions' }, () => {
+        fetchDashboardData()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'constraints' }, () => {
+        fetchDashboardData()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interventions' }, () => {
+        fetchDashboardData()
+      })
+      .subscribe((status) => {
+        setIsLive(status === 'SUBSCRIBED')
+      })
+
     return () => {
-      // Cleanup
-      setGradientId('')
+      supabase.removeChannel(channel)
     }
   }, [])
 
+  const fetchDashboardData = async () => {
+    try {
+      const [
+        businessesRes,
+        sessionsRes,
+        constraintsRes,
+        interventionsRes,
+      ] = await Promise.all([
+        supabase.from('businesses').select('*', { count: 'exact' }),
+        supabase.from('diagnostic_sessions').select('*, businesses(*)').order('started_at', { ascending: false }).limit(5),
+        supabase.from('constraints').select('*, diagnostic_sessions(*, businesses(*))').order('priority_score', { ascending: false }).limit(4),
+        supabase.from('interventions').select('*, diagnostic_sessions(*, businesses(*))').order('created_at', { ascending: false }).limit(4),
+      ])
+
+      setStats({
+        businessCount: businessesRes.count || businessesRes.data?.length || 0,
+        sessionCount: sessionsRes.data?.length || 0,
+        constraintCount: constraintsRes.data?.length || 0,
+        interventionCount: interventionsRes.data?.length || 0,
+      })
+
+      setRecentSessions(sessionsRes.data || [])
+      setTopConstraints(constraintsRes.data || [])
+      setPendingInterventions(interventionsRes.data || [])
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getScoreBadge = (score: number | null) => {
+    if (score === null || score === undefined) return <span className="text-zinc-500 text-xs font-mono">Pending</span>
+    if (score >= 7) return <span className="text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full text-xs font-mono border border-emerald-500/20">{score.toFixed(1)} / 10</span>
+    if (score >= 5) return <span className="text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full text-xs font-mono border border-amber-500/20">{score.toFixed(1)} / 10</span>
+    return <span className="text-red-400 bg-red-500/10 px-2.5 py-0.5 rounded-full text-xs font-mono border border-red-500/20">{score.toFixed(1)} / 10</span>
+  }
+
   return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 relative overflow-hidden">
-      {/* Background image overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900/95 via-slate-800/90 to-slate-900/95 z-0"></div>
-      
-      {/* Desktop Navigation */}
-      <div className="hidden lg:block">
-        <DashboardNav />
-      </div>
-      
-      {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-xl border-b border-white/10">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-3">
-            <button className="text-white">
-              <Menu className="h-6 w-6" />
-            </button>
-            <div>
-              <h1 className="text-lg font-bold text-white">Dashboard</h1>
-              <p className="text-xs text-slate-400">Управление и аналитика</p>
+    <div className="p-6 lg:p-10 max-w-7xl mx-auto w-full space-y-8">
+      {/* Top Header & Quick Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722] shadow-[0_0_8px_#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              Operational Terminal
+            </span>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono uppercase tracking-wider">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+              </span>
+              <span>Real-Time Live</span>
             </div>
           </div>
-          <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-full flex items-center justify-center">
-            <User className="h-5 w-5 text-white" />
-          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Command Center
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+            Diagnostic analytics, active constraint rankings, and surgical interventions.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <Link
+            href="/dashboard/businesses"
+            className="px-4 py-2.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-zinc-300 hover:text-white text-xs font-medium border border-white/[0.08] transition-all"
+          >
+            Manage Businesses
+          </Link>
+          <Link
+            href="/dashboard/diagnoses/new"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#ff6a38] to-[#ff5722] text-white text-xs font-semibold shadow-[0_3px_15px_rgba(255,87,34,0.35)] hover:shadow-[0_5px_20px_rgba(255,87,34,0.5)] transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            <span>New Diagnosis</span>
+          </Link>
         </div>
       </div>
-      
-      {/* Mobile Bottom Navigation */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-xl border-t border-white/10">
-        <div className="flex items-center justify-around p-4">
-          <button className="flex flex-col items-center gap-1 text-emerald-400">
-            <Home className="h-6 w-6" />
-            <span className="text-xs">Главная</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 text-slate-400">
-            <Search className="h-6 w-6" />
-            <span className="text-xs">Поиск</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 text-slate-400">
-            <Calendar className="h-6 w-6" />
-            <span className="text-xs">Календарь</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 text-slate-400">
-            <User className="h-6 w-6" />
-            <span className="text-xs">Профиль</span>
-          </button>
-        </div>
+
+      {/* 4 Quantitative Metric Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Client Businesses', value: stats.businessCount, icon: Building2, href: '/dashboard/businesses' },
+          { label: 'Diagnostic Runs', value: stats.sessionCount, icon: Stethoscope, href: '/dashboard/diagnoses' },
+          { label: 'Active Constraints', value: stats.constraintCount, icon: AlertTriangle, href: '/dashboard/constraints' },
+          { label: 'Interventions', value: stats.interventionCount, icon: Wrench, href: '/dashboard/interventions' },
+        ].map((item) => {
+          const Icon = item.icon
+          return (
+            <Link
+              key={item.label}
+              href={item.href}
+              className="p-5 rounded-2xl bg-[#10121a]/80 hover:bg-[#141722] border border-white/[0.07] hover:border-white/[0.15] transition-all duration-200 group"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] font-mono tracking-wider uppercase text-zinc-400">
+                  {item.label}
+                </span>
+                <div className="p-2 rounded-lg bg-white/[0.04] text-zinc-400 group-hover:text-[#ff5722] transition-colors">
+                  <Icon className="h-4 w-4" />
+                </div>
+              </div>
+              <div className="text-3xl font-bold font-mono text-white group-hover:text-[#ff5722] transition-colors">
+                {loading ? '—' : item.value}
+              </div>
+            </Link>
+          )
+        })}
       </div>
-      
-      <main className="flex-1 p-4 md:p-6 lg:p-8 relative z-10 pt-20 lg:pt-8 pb-24 lg:pb-8">
-        {/* Desktop Header */}
-        <div className="hidden lg:block mb-8">
-          <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-2">Dashboard</h1>
-          <p className="text-slate-400 text-lg">Управление и аналитика</p>
-        </div>
 
-        {/* Top Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-6">
-          {/* Геометрия хаоса */}
-          <div className="bg-stone-900/80 backdrop-blur-2xl rounded-3xl border border-stone-700/50 shadow-2xl p-4 md:p-6 hover:bg-stone-900/90 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-stone-600 to-stone-800 rounded-2xl flex items-center justify-center">
-                <Box className="h-6 w-6 md:h-8 md:w-8 text-stone-300" />
-              </div>
-              <span className="text-xs font-medium text-stone-400 uppercase tracking-widest hidden md:block">Геометрия хаоса</span>
+      {/* Main Grid: Diagnoses & Constraints */}
+      <div className="grid lg:grid-cols-12 gap-8">
+        
+        {/* Left Column (7 cols): Recent Diagnostic Sessions */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Stethoscope className="h-4 w-4 text-[#ff5722]" />
+              <h2 className="text-base font-semibold text-white tracking-tight">Recent Diagnoses</h2>
             </div>
-            <h3 className="text-xl md:text-2xl font-bold text-white mb-2">Упорядоченный беспорядок</h3>
-            <p className="text-stone-400 text-sm">Системный подход к творчеству</p>
+            <Link 
+              href="/dashboard/diagnoses" 
+              className="text-xs text-zinc-400 hover:text-[#ff5722] flex items-center gap-1 transition-colors"
+            >
+              <span>View all</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
           </div>
 
-          {/* Неделя в работе */}
-          <div className="bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl p-4 md:p-6 hover:bg-white/15 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-emerald-500/20 to-emerald-600/30 rounded-2xl flex items-center justify-center">
-                <BarChart3 className="h-6 w-6 md:h-8 md:w-8 text-emerald-400" />
-              </div>
-              <span className="text-xs font-medium text-white/60 uppercase tracking-widest hidden md:block">Неделя в работе</span>
-            </div>
-            <h3 className="text-sm font-medium text-white/80 mb-3">Частота загруженности</h3>
-            <div className="flex items-end justify-between gap-1 mb-2">
-              {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day, i) => (
-                <div key={day} className="flex flex-col items-center flex-1">
-                  <div className="w-full bg-white/20 rounded-t-lg mb-1 relative h-12 md:h-16">
-                    <div 
-                      className="absolute bottom-0 w-full bg-gradient-to-t from-emerald-500 to-emerald-400 rounded-t-lg transition-all"
-                      style={{ height: i === 2 ? '80%' : i === 4 ? '60%' : '40%' }}
-                    />
-                  </div>
-                  <span className="text-xs text-white/60">{day}</span>
-                </div>
-              ))}
-            </div>
-            <div className="text-center mt-3">
-              <span className="text-2xl md:text-3xl font-bold text-white">16ч</span>
-              <span className="text-sm text-white/60 ml-2">за неделю</span>
-            </div>
-          </div>
-
-          {/* Уровень заряда */}
-          <div className="bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl p-4 md:p-6 hover:bg-white/15 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-amber-500/20 to-amber-600/30 rounded-2xl flex items-center justify-center">
-                <Zap className="h-6 w-6 md:h-8 md:w-8 text-amber-400" />
-              </div>
-              <span className="text-xs font-medium text-white/60 uppercase tracking-widest hidden md:block">Уровень заряда</span>
-            </div>
-            <div className="flex gap-2 md:gap-4 mb-4">
-              <div className="relative w-16 h-16 md:w-20 md:h-20">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" stroke="rgba(255,255,255,0.1)" strokeWidth="6" fill="none" />
-                  <circle cx="32" cy="32" r="28" stroke="#10b981" strokeWidth="6" fill="none" 
-                    strokeDasharray="176" strokeDashoffset="18" strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-base md:text-lg font-bold text-white">90%</span>
-                </div>
-              </div>
-              <div className="relative w-16 h-16 md:w-20 md:h-20">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="32" cy="32" r="28" stroke="rgba(255,255,255,0.1)" strokeWidth="6" fill="none" />
-                  <circle cx="32" cy="32" r="28" stroke="#3b82f6" strokeWidth="6" fill="none" 
-                    strokeDasharray="176" strokeDashoffset="62" strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-base md:text-lg font-bold text-white">65%</span>
-                </div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-white/70">В режиме потока</span>
-                <div className="w-16 md:w-24 bg-white/20 rounded-full h-1.5">
-                  <div className="bg-emerald-400 h-1.5 rounded-full" style={{ width: '80%' }} />
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-white/70">Глубокая работа</span>
-                <div className="w-16 md:w-24 bg-white/20 rounded-full h-1.5">
-                  <div className="bg-blue-400 h-1.5 rounded-full" style={{ width: '65%' }} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Рабочая аналитика */}
-          <div className="bg-stone-900/80 backdrop-blur-2xl rounded-3xl border border-stone-700/50 shadow-2xl p-4 md:p-6 hover:bg-stone-900/90 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-purple-500/20 to-purple-600/30 rounded-2xl flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 md:h-8 md:w-8 text-purple-400" />
-              </div>
-              <span className="text-xs font-medium text-stone-400 uppercase tracking-widest hidden md:block">Рабочая аналитика</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 md:gap-4">
-              <div className="text-center">
-                <div className="text-xl md:text-2xl font-bold text-white">1065</div>
-                <div className="text-xs text-stone-400 mt-1">Эскиза</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl md:text-2xl font-bold text-white">00</div>
-                <div className="text-xs text-stone-400 mt-1">Креатива</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl md:text-2xl font-bold text-white">7</div>
-                <div className="text-xs text-stone-400 mt-1">Дней дедлайна</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Middle Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6">
-          {/* Настройки проектов */}
-          <div className="bg-stone-900/80 backdrop-blur-2xl rounded-3xl border border-stone-700/50 shadow-2xl p-4 md:p-6 hover:bg-stone-900/90 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-blue-500/20 to-blue-600/30 rounded-xl flex items-center justify-center">
-                <Settings className="h-5 w-5 md:h-6 md:w-6 text-blue-400" />
-              </div>
-              <span className="text-xs font-medium text-stone-400 uppercase tracking-widest hidden md:block">Настройки проектов</span>
-            </div>
-            
-            <div className="mb-4 md:mb-6">
-              <h4 className="text-sm font-semibold text-white mb-3">Фишки процесса</h4>
-              <div className="space-y-2">
-                {['Гибкие проекты', 'Полное погружение', 'Скорость и качество'].map((item, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    <span className="text-sm text-stone-300">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Этапы в часах</h4>
-              <div className="space-y-2 md:space-y-3">
-                {[
-                  { name: 'Исследование', progress: 20 },
-                  { name: 'Идеи', progress: 50 },
-                  { name: 'Визуализация', progress: 80 },
-                  { name: 'Доработки', progress: 40 },
-                  { name: 'Результат', progress: 10 }
-                ].map((stage, i) => (
-                  <div key={i} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-stone-400">{stage.name}</span>
-                      <span className="text-white">{stage.progress}%</span>
-                    </div>
-                    <div className="w-full bg-stone-700 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
-                        style={{ width: `${stage.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Число заказов */}
-          <div className="bg-stone-900/80 backdrop-blur-2xl rounded-3xl border border-stone-700/50 shadow-2xl p-4 md:p-6 hover:bg-stone-900/90 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-pink-500/20 to-pink-600/30 rounded-xl flex items-center justify-center">
-                <Activity className="h-5 w-5 md:h-6 md:w-6 text-pink-400" />
-              </div>
-              <span className="text-xs font-medium text-stone-400 uppercase tracking-widest hidden md:block">Число заказов</span>
-            </div>
-            
-            <h4 className="text-sm font-semibold text-white mb-4">Частота в зависимости от месяца</h4>
-            
-            <div className="relative h-24 md:h-32 mb-4">
-              <svg className="w-full h-full" viewBox="0 0 200 100">
-                <path
-                  d="M 20 80 Q 60 40 100 60 T 180 30"
-                  stroke="#ec4899"
-                  strokeWidth="3"
-                  fill="none"
-                  strokeLinecap="round"
-                />
-                <circle cx="20" cy="80" r="4" fill="#ec4899" />
-                <circle cx="60" cy="55" r="4" fill="#d946ef" />
-                <circle cx="100" cy="60" r="4" fill="#c026d3" />
-                <circle cx="140" cy="45" r="4" fill="#a855f7" />
-                <circle cx="180" cy="30" r="4" fill="#8b5cf6" />
-              </svg>
-            </div>
-            
-            <div className="flex justify-between text-xs">
-              <div className="text-center">
-                <div className="text-emerald-400 font-semibold">+90%</div>
-                <div className="text-stone-400">Фев</div>
-              </div>
-              <div className="text-center">
-                <div className="text-emerald-400 font-semibold">+40%</div>
-                <div className="text-stone-400">Мар</div>
-              </div>
-              <div className="text-center">
-                <div className="text-emerald-400 font-semibold">+10%</div>
-                <div className="text-stone-400">Апр</div>
-              </div>
-              <div className="text-center">
-                <div className="text-red-400 font-semibold">-25%</div>
-                <div className="text-stone-400">Май</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Календарь */}
-          <div className="bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl p-4 md:p-6 hover:bg-white/15 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-cyan-500/20 to-cyan-600/30 rounded-xl flex items-center justify-center">
-                <Calendar className="h-5 w-5 md:h-6 md:w-6 text-cyan-400" />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-white">{selectedMonth}</span>
-                <button 
-                  onClick={() => setSelectedMonth('Июнь 2025')}
-                  className="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded-lg transition-all"
+          <div className="bg-[#10121a]/80 rounded-2xl border border-white/[0.07] divide-y divide-white/[0.05] overflow-hidden">
+            {loading ? (
+              <div className="p-8 text-center text-xs text-zinc-500 font-mono">Loading sessions...</div>
+            ) : recentSessions.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <p className="text-xs text-zinc-400">No diagnostic sessions recorded yet.</p>
+                <Link
+                  href="/dashboard/diagnoses/new"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium bg-[#ff5722] text-white shadow-sm"
                 >
-                  Июнь
-                </button>
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Start First Diagnosis</span>
+                </Link>
               </div>
-            </div>
-            
-            <div className="space-y-2 md:space-y-3">
-              {[
-                { time: '12.00', task: 'Созвон с клиентом', color: 'emerald' },
-                { time: '13.00', task: 'Анализ статистики', color: 'blue' },
-                { time: '14.00', task: 'Анализ конкурентов', color: 'purple' },
-                { time: '15.00', task: 'Изучение трендов', color: 'pink' }
-              ].map((event, i) => (
-                <div key={i} className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
-                  <div className={`w-2 h-2 rounded-full bg-${event.color}-400`} />
-                  <div className="flex-1">
-                    <div className="text-xs text-white/60">{event.time}</div>
-                    <div className="text-sm text-white">{event.task}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-          {/* Рабочее время VS Энергия */}
-          <div className="bg-stone-900/80 backdrop-blur-2xl rounded-3xl border border-stone-700/50 shadow-2xl p-4 md:p-6 hover:bg-stone-900/90 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-orange-500/20 to-orange-600/30 rounded-xl flex items-center justify-center">
-                <Clock className="h-5 w-5 md:h-6 md:w-6 text-orange-400" />
-              </div>
-              <span className="text-xs font-medium text-stone-400 uppercase tracking-widest hidden md:block">Рабочее время VS Энергия</span>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/5 rounded-2xl p-3 md:p-4">
-                <div className="text-2xl md:text-3xl font-bold text-white mb-1">8.5ч</div>
-                <div className="text-sm text-stone-400">Среднее время</div>
-                <div className="mt-3 flex items-center gap-2">
-                  <Flame className="h-4 w-4 text-orange-400" />
-                  <span className="text-xs text-orange-400">Высокая активность</span>
-                </div>
-              </div>
-              <div className="bg-white/5 rounded-2xl p-3 md:p-4">
-                <div className="text-2xl md:text-3xl font-bold text-white mb-1">92%</div>
-                <div className="text-sm text-stone-400">Уровень энергии</div>
-                <div className="mt-3 flex items-center gap-2">
-                  <Target className="h-4 w-4 text-emerald-400" />
-                  <span className="text-xs text-emerald-400">Цели достигнуты</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Проекты в работе */}
-          <div className="bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl p-4 md:p-6 hover:bg-white/15 transition-all">
-            <div className="flex items-start justify-between mb-4">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-indigo-500/20 to-indigo-600/30 rounded-xl flex items-center justify-center">
-                <Target className="h-5 w-5 md:h-6 md:w-6 text-indigo-400" />
-              </div>
-              <span className="text-xs font-medium text-white/60 uppercase tracking-widest hidden md:block">Проекты в работе</span>
-            </div>
-            
-            <div className="space-y-2 md:space-y-3">
-              {[
-                { name: 'Редизайн сайта', progress: 75, client: 'TechCorp' },
-                { name: 'Брендинг', progress: 45, client: 'StartupXYZ' },
-                { name: 'Мобильное приложение', progress: 90, client: 'AppDev' }
-              ].map((project, i) => (
-                <div key={i} className="p-3 md:p-4 bg-white/5 rounded-xl hover:bg-white/10 transition-all">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <div className="text-sm font-medium text-white">{project.name}</div>
-                      <div className="text-xs text-white/60">{project.client}</div>
+            ) : (
+              recentSessions.map((s) => (
+                <div
+                  key={s.id}
+                  className="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm font-semibold text-white truncate">
+                        {s.businesses?.business_name || 'Client Assessment'}
+                      </p>
+                      <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${
+                        s.status === 'completed' 
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      }`}>
+                        {s.status}
+                      </span>
                     </div>
-                    <span className="text-sm font-semibold text-white">{project.progress}%</span>
+                    <div className="flex items-center gap-3 text-xs text-zinc-500 font-mono">
+                      <span>{new Date(s.started_at).toLocaleDateString()}</span>
+                      <span>•</span>
+                      <span>v{s.framework_version || '1.0'}</span>
+                    </div>
                   </div>
-                  <div className="w-full bg-white/20 rounded-full h-2">
-                    <div 
-                      className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all"
-                      style={{ width: `${project.progress}%` }}
-                    />
+
+                  <div className="flex items-center gap-4 shrink-0">
+                    <div className="text-right hidden sm:block">
+                      <div className="text-[10px] font-mono uppercase text-zinc-500 mb-0.5">Score</div>
+                      {getScoreBadge(s.overall_score)}
+                    </div>
+
+                    <Link
+                      href={`/dashboard/diagnoses/${s.id}`}
+                      className="p-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.1] text-zinc-300 hover:text-white border border-white/[0.08] transition-all"
+                      title="View Details"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
                   </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
           </div>
         </div>
-      </main>
+
+        {/* Right Column (5 cols): Top Identified Constraints */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Flame className="h-4 w-4 text-[#ff5722]" />
+              <h2 className="text-base font-semibold text-white tracking-tight">Top Constraints</h2>
+            </div>
+            <Link 
+              href="/dashboard/constraints" 
+              className="text-xs text-zinc-400 hover:text-[#ff5722] flex items-center gap-1 transition-colors"
+            >
+              <span>Explore map</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          <div className="space-y-3">
+            {loading ? (
+              <div className="p-8 text-center text-xs text-zinc-500 font-mono bg-[#10121a]/80 rounded-2xl border border-white/[0.07]">
+                Loading constraints...
+              </div>
+            ) : topConstraints.length === 0 ? (
+              <div className="p-8 text-center bg-[#10121a]/80 rounded-2xl border border-white/[0.07] text-xs text-zinc-400">
+                No active bottlenecks identified yet. Complete a diagnostic questionnaire to reveal constraints.
+              </div>
+            ) : (
+              topConstraints.map((c) => (
+                <div
+                  key={c.id}
+                  className="p-4 rounded-2xl bg-[#10121a]/80 border border-white/[0.07] hover:border-[#ff5722]/30 transition-all"
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#ff5722] bg-[#ff5722]/10 px-2 py-0.5 rounded">
+                      {c.constraint_type} Constraint
+                    </span>
+                    <span className="text-xs font-mono font-semibold text-white">
+                      Priority {c.priority_score || c.severity || '—'}
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-zinc-200 line-clamp-2">
+                    {c.description}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-500 font-mono">
+                    <span className="truncate">
+                      {c.diagnostic_sessions?.businesses?.business_name || 'Organization'}
+                    </span>
+                    <span>Sev: {c.severity || '—'}/10</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Bottom Section: Active Interventions Blueprint */}
+      <div className="space-y-4 pt-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-[#ff5722]" />
+            <h2 className="text-base font-semibold text-white tracking-tight">Active Interventions</h2>
+          </div>
+          <Link 
+            href="/dashboard/interventions" 
+            className="text-xs text-zinc-400 hover:text-[#ff5722] flex items-center gap-1 transition-colors"
+          >
+            <span>All interventions</span>
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {loading ? (
+            <div className="col-span-full p-8 text-center text-xs text-zinc-500 font-mono bg-[#10121a]/80 rounded-2xl border border-white/[0.07]">
+              Loading interventions...
+            </div>
+          ) : pendingInterventions.length === 0 ? (
+            <div className="col-span-full p-8 text-center bg-[#10121a]/80 rounded-2xl border border-white/[0.07] text-xs text-zinc-400">
+              No active interventions currently deployed.
+            </div>
+          ) : (
+            pendingInterventions.map((inv) => (
+              <div
+                key={inv.id}
+                className="p-4 rounded-2xl bg-[#10121a]/80 border border-white/[0.07] flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded ${
+                      inv.priority === 'high' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'
+                    }`}>
+                      {inv.priority}
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">{inv.status}</span>
+                  </div>
+                  <h3 className="text-xs font-semibold text-white mb-1 line-clamp-2">{inv.title}</h3>
+                  <p className="text-[11px] text-zinc-400 line-clamp-2">{inv.description}</p>
+                </div>
+                <div className="mt-3 pt-3 border-t border-white/[0.05] text-[10px] font-mono text-zinc-500 truncate">
+                  {inv.diagnostic_sessions?.businesses?.business_name || 'Client Business'}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
     </div>
   )
 }

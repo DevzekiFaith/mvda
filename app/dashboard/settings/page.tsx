@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Settings, User, Bell, Shield, Palette, Database } from 'lucide-react'
-import DashboardNav from '@/components/DashboardNav'
+import { User, Bell, Shield, Palette, Database, LogOut, CheckCircle2, KeyRound } from 'lucide-react'
 
 export default function SettingsPage() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loggingOut, setLoggingOut] = useState(false)
+  const [savedSuccess, setSavedSuccess] = useState(false)
 
   useEffect(() => {
     fetchUser()
@@ -19,165 +20,121 @@ export default function SettingsPage() {
     setLoading(false)
   }
 
+  const handleLogout = async () => {
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      await supabase.auth.signOut()
+      await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+      window.location.href = '/login'
+    } catch (err) {
+      window.location.href = '/login'
+    }
+  }
+
   return (
-    <div className="flex bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
-      <DashboardNav />
-      <main className="flex-1 p-8">
-        <div className="mb-8">
-          <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-2">Configuration</p>
-          <h1 className="text-3xl font-semibold text-white tracking-tight">Settings</h1>
-          <p className="text-slate-400 mt-2">Manage your account and application preferences</p>
+    <div className="p-6 lg:p-10 max-w-4xl mx-auto w-full space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              System Configuration
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Consultant Settings
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+            Identity, security parameters, and terminal environment preferences.
+          </p>
         </div>
 
-        {loading ? (
-          <div className="text-center text-white py-12">Loading settings...</div>
-        ) : (
-          <div className="space-y-6">
-            {/* Profile Section */}
-            <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-cyan-500 rounded-xl flex items-center justify-center">
-                  <User className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-white">Profile Settings</h2>
-                  <p className="text-slate-400 text-sm">Manage your personal information</p>
-                </div>
-              </div>
+        <button
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-xs font-medium transition-all"
+        >
+          <LogOut className="h-4 w-4" />
+          <span>{loggingOut ? 'Signing out...' : 'Sign Out'}</span>
+        </button>
+      </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={user?.email || ''}
-                    disabled
-                    className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl text-slate-300 cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                    User ID
-                  </label>
-                  <input
-                    type="text"
-                    value={user?.id || ''}
-                    disabled
-                    className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl text-slate-300 cursor-not-allowed"
-                  />
+      {loading ? (
+        <div className="p-12 text-center text-xs font-mono text-zinc-500">Loading configuration...</div>
+      ) : (
+        <div className="space-y-6">
+          {/* Profile Dossier */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#10121a]/90 border border-white/[0.08] shadow-sm space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-zinc-800 to-zinc-700 border border-white/[0.1] flex items-center justify-center text-xl font-bold text-white shadow-inner">
+                {user?.email ? user.email.charAt(0).toUpperCase() : 'C'}
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">
+                  {user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Consultant Profile'}
+                </h2>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span className="text-xs font-mono text-zinc-400">Authenticated Consultant</span>
                 </div>
               </div>
             </div>
 
-            {/* Notification Settings */}
-            <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center">
-                  <Bell className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-white">Notification Settings</h2>
-                  <p className="text-slate-400 text-sm">Configure your notification preferences</p>
-                </div>
+            <div className="grid sm:grid-cols-2 gap-4 text-xs font-mono">
+              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                <span className="text-[10px] uppercase text-zinc-500 block mb-1">Email Address</span>
+                <span className="text-zinc-200">{user?.email}</span>
               </div>
-
-              <div className="space-y-4">
-                {[
-                  { label: 'Email notifications for completed diagnoses', checked: true },
-                  { label: 'Email notifications for new constraints', checked: true },
-                  { label: 'Weekly performance reports', checked: false },
-                  { label: 'System updates and announcements', checked: true }
-                ].map((item, index) => (
-                  <div key={index} className="flex items-center justify-between">
-                    <span className="text-slate-300">{item.label}</span>
-                    <button
-                      className={`w-12 h-6 rounded-full transition-all ${
-                        item.checked ? 'bg-emerald-500' : 'bg-slate-600'
-                      }`}
-                    >
-                      <div className={`w-5 h-5 bg-white rounded-full transform transition-all ${
-                        item.checked ? 'translate-x-6' : 'translate-x-1'
-                      }`} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Security Settings */}
-            <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-500 rounded-xl flex items-center justify-center">
-                  <Shield className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-white">Security Settings</h2>
-                  <p className="text-slate-400 text-sm">Manage your security preferences</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <button className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white transition-all">
-                  Change Password
-                </button>
-                <button className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white transition-all">
-                  Enable Two-Factor Authentication
-                </button>
-              </div>
-            </div>
-
-            {/* Appearance Settings */}
-            <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-xl flex items-center justify-center">
-                  <Palette className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-white">Appearance</h2>
-                  <p className="text-slate-400 text-sm">Customize your dashboard experience</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-400 uppercase tracking-widest mb-2">
-                    Theme
-                  </label>
-                  <select className="w-full px-4 py-3 bg-white/10 backdrop-blur-xl border border-white/20 rounded-xl text-white">
-                    <option value="dark">Dark (Default)</option>
-                    <option value="light">Light</option>
-                    <option value="system">System</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Data Management */}
-            <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center">
-                  <Database className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-semibold text-white">Data Management</h2>
-                  <p className="text-slate-400 text-sm">Export or manage your data</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <button className="w-full px-4 py-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-white transition-all">
-                  Export All Data
-                </button>
-                <button className="w-full px-4 py-3 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-xl text-red-400 transition-all">
-                  Delete Account
-                </button>
+              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                <span className="text-[10px] uppercase text-zinc-500 block mb-1">UUID</span>
+                <span className="text-zinc-400 truncate block">{user?.id}</span>
               </div>
             </div>
           </div>
-        )}
-      </main>
+
+          {/* Security & Access */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#10121a]/90 border border-white/[0.08] space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <Shield className="h-5 w-5 text-[#ff5722]" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                Security & Session Management
+              </h3>
+            </div>
+            <p className="text-xs text-zinc-400 font-light leading-relaxed">
+              Sessions are guarded with encrypted HTTP-only SSR cookies via Supabase Auth. Terminating your session clears client and server storage immediately.
+            </p>
+            <div className="pt-2">
+              <button
+                onClick={handleLogout}
+                className="px-5 py-2.5 rounded-xl bg-white/[0.04] hover:bg-red-500/10 border border-white/[0.08] hover:border-red-500/30 text-xs font-medium text-zinc-300 hover:text-red-400 transition-all"
+              >
+                Terminate Active Session & Logout
+              </button>
+            </div>
+          </div>
+
+          {/* Theme & Terminal Aesthetic */}
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#10121a]/90 border border-white/[0.08] space-y-4">
+            <div className="flex items-center gap-3 mb-2">
+              <Palette className="h-5 w-5 text-[#ff5722]" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                Visual System
+              </h3>
+            </div>
+            <div className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div>
+                <p className="text-xs font-semibold text-white">Matte Obsidian & Ember Mode</p>
+                <p className="text-[11px] text-zinc-500 mt-0.5">High-contrast executive minimalist palette</p>
+              </div>
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#ff5722]/10 text-[#ff5722] border border-[#ff5722]/20 font-semibold">
+                Active System
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

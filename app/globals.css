@@ -1,8 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #090a0f;
+  --foreground: #f4f4f6;
+  --card-bg: #111319;
+  --card-border: rgba(255, 255, 255, 0.07);
+  --accent-orange: #ff5722;
+  --accent-orange-hover: #ff6e3a;
+  --accent-glow: rgba(255, 87, 34, 0.25);
+  --muted: #8e92a0;
 }
 
 @theme inline {
@@ -10,50 +16,96 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  
-  /* Custom colors for glassmorphism design */
-  --color-sage-100: #d4e8d4;
-  --color-sage-200: #b8d1b8;
-  --color-sage-300: #9cb99c;
-  --color-sage-400: #80a180;
-  --color-sage-500: #648964;
-  --color-sage-600: #4a704a;
-  --color-sage-700: #305730;
-  --color-sage-800: #1e3e1e;
-  --color-sage-900: #0f2a0f;
-  
-  --color-eucalyptus-100: #d1e8d1;
-  --color-eucalyptus-200: #b3d3b3;
-  --color-eucalyptus-300: #95bd95;
-  --color-eucalyptus-400: #78a778;
-  --color-eucalyptus-500: #5b915b;
-  --color-eucalyptus-600: #3e7b3e;
-  --color-eucalyptus-700: #266526;
-  --color-eucalyptus-800: #1a4f1a;
-  --color-eucalyptus-900: #103910;
-  
-  --color-stone-50: #fafaf9;
-  --color-stone-100: #f5f5f4;
-  --color-stone-200: #e7e5e4;
-  --color-stone-300: #d6d3d1;
-  --color-stone-400: #a8a29e;
-  --color-stone-500: #78716c;
-  --color-stone-600: #57534e;
-  --color-stone-700: #44403c;
-  --color-stone-800: #292524;
-  --color-stone-900: #1c1917;
-  --color-stone-950: #0c0a09;
+
+  /* Obsidian & Ember Luxury Palette */
+  --color-obsidian-950: #06070a;
+  --color-obsidian-900: #090a0f;
+  --color-obsidian-850: #0e1017;
+  --color-obsidian-800: #13151f;
+  --color-obsidian-700: #1b1e2c;
+  --color-obsidian-600: #262a3c;
+
+  --color-ember-400: #ff7844;
+  --color-ember-500: #ff5722;
+  --color-ember-600: #f44312;
+  --color-ember-700: #d9380a;
+
+  --color-slate-100: #f1f3f7;
+  --color-slate-200: #e2e5ec;
+  --color-slate-300: #c4c8d4;
+  --color-slate-400: #9398a7;
+  --color-slate-500: #6d7283;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glass & frosted surfaces */
+.frosted-glass {
+  background: rgba(17, 19, 25, 0.72);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.frosted-pill {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 8px 24px -6px rgba(0, 0, 0, 0.4);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.frosted-pill:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Ember Glow Elements */
+.ember-button {
+  background: linear-gradient(135deg, #ff6a38 0%, #ff5722 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 20px -2px rgba(255, 87, 34, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ember-button:hover {
+  background: linear-gradient(135deg, #ff7a4d 0%, #ff6433 100%);
+  box-shadow: 0 6px 28px -1px rgba(255, 87, 34, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.ember-ring {
+  box-shadow: 0 0 0 2px #ff5722, 0 0 35px -4px rgba(255, 87, 34, 0.5);
+}
+
+/* Minimal subtle scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090a0f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1c202d;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2b3145;
 }

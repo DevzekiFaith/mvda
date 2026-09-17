@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { Wrench, Plus, Target } from 'lucide-react'
-import DashboardNav from '@/components/DashboardNav'
+import { Wrench, Plus, CheckCircle2, Clock, Target, ArrowRight, ShieldCheck } from 'lucide-react'
+import Link from 'next/link'
 
 interface Intervention {
   id: string
@@ -14,6 +14,7 @@ interface Intervention {
   status: string
   created_at: string
   diagnostic_sessions: {
+    id: string
     businesses: {
       business_name: string
     }
@@ -23,106 +24,157 @@ interface Intervention {
 export default function InterventionsPage() {
   const [interventions, setInterventions] = useState<Intervention[]>([])
   const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed'>('all')
 
   useEffect(() => {
     fetchInterventions()
+
+    const channel = supabase
+      .channel('interventions-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'interventions' }, () => {
+        fetchInterventions()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const fetchInterventions = async () => {
     const { data, error } = await supabase
       .from('interventions')
-      .select('*, diagnostic_sessions(*)')
+      .select('*, diagnostic_sessions(*, businesses(*))')
       .order('created_at', { ascending: false })
 
     if (error) {
       console.error('Error fetching interventions:', error)
     } else {
-      setInterventions(data || [])
+      setInterventions((data as any) || [])
     }
     setLoading(false)
   }
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return 'bg-red-500/20 text-red-400'
-      case 'medium':
-        return 'bg-amber-500/20 text-amber-400'
-      case 'low':
-        return 'bg-emerald-500/20 text-emerald-400'
-      default:
-        return 'bg-slate-500/20 text-slate-400'
+  const updateStatus = async (id: string, newStatus: string) => {
+    const { error } = await supabase
+      .from('interventions')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', id)
+
+    if (!error) {
+      setInterventions(prev => prev.map(inv => inv.id === id ? { ...inv, status: newStatus } : inv))
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'bg-emerald-500/20 text-emerald-400'
-      case 'in_progress':
-        return 'bg-blue-500/20 text-blue-400'
-      case 'planned':
-        return 'bg-purple-500/20 text-purple-400'
+  const filteredInterventions = interventions.filter(inv =>
+    statusFilter === 'all' || inv.status === statusFilter
+  )
+
+  const getPriorityBadge = (priority: string) => {
+    switch (priority?.toLowerCase()) {
+      case 'high':
+        return <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-red-500/10 text-red-400 border border-red-500/20">High Priority</span>
+      case 'medium':
+        return <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">Medium Priority</span>
       default:
-        return 'bg-slate-500/20 text-slate-400'
+        return <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Low Priority</span>
     }
   }
 
   return (
-    <div className="flex bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
-      <DashboardNav />
-      <main className="flex-1 p-8">
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-2">Strategic Interventions</p>
-            <h1 className="text-3xl font-semibold text-white tracking-tight">Interventions</h1>
-            <p className="text-slate-400 mt-2">Manage strategic interventions and action plans</p>
+    <div className="p-6 lg:p-10 max-w-7xl mx-auto w-full space-y-8">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              Execution Engine
+            </span>
           </div>
-          <button className="flex items-center px-6 py-3 bg-emerald-700/90 backdrop-blur-xl text-white rounded-2xl border border-emerald-600/50 shadow-lg hover:bg-emerald-800 transition-all">
-            <Plus className="mr-2 h-5 w-5" />
-            New Intervention
-          </button>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Surgical Interventions
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+            Prescribed actions, operational redesigns, and constraint alleviation plans.
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
-            <div className="col-span-full text-center text-white py-12">Loading interventions...</div>
-          ) : interventions.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <Wrench className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400 text-lg">No interventions found</p>
-              <p className="text-slate-500 text-sm mt-2">Complete a diagnosis to create interventions</p>
-            </div>
-          ) : (
-            interventions.map((intervention) => (
-              <div key={intervention.id} className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6 hover:bg-white/15 transition-all">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-blue-600/30 rounded-xl flex items-center justify-center">
-                    <Target className="h-6 w-6 text-blue-400" />
-                  </div>
-                  <div className="flex gap-2">
-                    <span className={`text-xs font-medium px-2 py-1 rounded-lg ${getPriorityColor(intervention.priority)}`}>
-                      {intervention.priority}
-                    </span>
-                    <span className={`text-xs font-medium px-2 py-1 rounded-lg ${getStatusColor(intervention.status)}`}>
-                      {intervention.status}
-                    </span>
-                  </div>
-                </div>
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.03] border border-white/[0.08] overflow-x-auto">
+          {(['all', 'pending', 'in_progress', 'completed'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setStatusFilter(tab)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono uppercase tracking-wider transition-all whitespace-nowrap ${
+                statusFilter === tab
+                  ? 'bg-[#ff5722] text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              {tab.replace('_', ' ')}
+            </button>
+          ))}
+        </div>
+      </div>
 
-                <h3 className="text-white font-medium mb-2">{intervention.title}</h3>
-                <p className="text-slate-400 text-sm line-clamp-3">{intervention.description}</p>
+      {/* Interventions Grid */}
+      {loading ? (
+        <div className="p-12 text-center text-xs font-mono text-zinc-500">Loading active interventions...</div>
+      ) : filteredInterventions.length === 0 ? (
+        <div className="p-12 text-center bg-[#10121a]/80 rounded-2xl border border-white/[0.07] text-xs text-zinc-400">
+          No interventions matching this status filter. Run a business diagnosis to generate actionable recommendations.
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredInterventions.map((inv) => {
+            const businessName = inv.diagnostic_sessions?.businesses?.business_name || 'Client Business'
 
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <p className="text-xs text-slate-500">
-                    {intervention.diagnostic_sessions?.businesses?.business_name || 'Unknown Business'}
+            return (
+              <div
+                key={inv.id}
+                className="p-6 rounded-2xl bg-[#10121a]/90 border border-white/[0.07] hover:border-white/[0.15] transition-all duration-200 flex flex-col justify-between shadow-sm"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    {getPriorityBadge(inv.priority)}
+                    <select
+                      value={inv.status}
+                      onChange={(e) => updateStatus(inv.id, e.target.value)}
+                      className="text-[10px] font-mono uppercase bg-[#141722] border border-white/[0.08] text-zinc-300 rounded px-2 py-0.5 focus:outline-none focus:border-[#ff5722]"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="completed">Completed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+
+                  <h3 className="text-base font-bold text-white mb-2 leading-snug">
+                    {inv.title}
+                  </h3>
+                  <p className="text-xs text-zinc-400 font-light leading-relaxed mb-4">
+                    {inv.description}
                   </p>
                 </div>
+
+                <div className="pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs text-zinc-500 font-mono">
+                  <span className="truncate max-w-[150px]">{businessName}</span>
+                  {inv.session_id && (
+                    <Link
+                      href={`/dashboard/diagnoses/${inv.session_id}`}
+                      className="text-[#ff5722] hover:underline inline-flex items-center gap-1 font-sans"
+                    >
+                      <span>Session</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  )}
+                </div>
               </div>
-            ))
-          )}
+            )
+          })}
         </div>
-      </main>
+      )}
     </div>
   )
 }

@@ -2,167 +2,194 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { TrendingUp, BarChart3, Calendar } from 'lucide-react'
-import DashboardNav from '@/components/DashboardNav'
-
-interface Outcome {
-  id: string
-  session_id: string
-  metric_name: string
-  baseline_value: number
-  target_value: number
-  current_value: number
-  measurement_date: string
-  diagnostic_sessions: {
-    businesses: {
-      business_name: string
-    }
-  }
-}
+import { TrendingUp, BarChart3, Calendar, DollarSign, Users, Target, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import Link from 'next/link'
 
 export default function OutcomesPage() {
-  const [outcomes, setOutcomes] = useState<Outcome[]>([])
+  const [baselines, setBaselines] = useState<any[]>([])
+  const [reviews, setReviews] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchOutcomes()
+    fetchOutcomesData()
+
+    const channel = supabase
+      .channel('outcomes-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'baseline_metrics' }, () => {
+        fetchOutcomesData()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => {
+        fetchOutcomesData()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
-  const fetchOutcomes = async () => {
-    const { data, error } = await supabase
-      .from('baseline_metrics')
-      .select('*, diagnostic_sessions(*)')
-      .order('recorded_at', { ascending: false })
+  const fetchOutcomesData = async () => {
+    try {
+      const [baselinesRes, reviewsRes] = await Promise.all([
+        supabase.from('baseline_metrics').select('*, businesses(*), diagnostic_sessions(*)').order('recorded_at', { ascending: false }),
+        supabase.from('reviews').select('*, businesses(*)').order('review_date', { ascending: false }),
+      ])
 
-    if (error) {
-      console.error('Error fetching outcomes:', error)
-    } else {
-      setOutcomes(data || [])
+      setBaselines(baselinesRes.data || [])
+      setReviews(reviewsRes.data || [])
+    } catch (err) {
+      console.error('Error fetching outcomes:', err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
-  const calculateProgress = (baseline: number, target: number, current: number) => {
-    if (target === baseline) return 0
-    const progress = ((current - baseline) / (target - baseline)) * 100
-    return Math.min(100, Math.max(0, progress))
+  const formatMoney = (val: number | null) => {
+    if (val === null || val === undefined) return '—'
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val)
   }
 
   return (
-    <div className="flex bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
-      <DashboardNav />
-      <main className="flex-1 p-8">
-        <div className="mb-8">
-          <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-2">Performance Tracking</p>
-          <h1 className="text-3xl font-semibold text-white tracking-tight">Outcomes</h1>
-          <p className="text-slate-400 mt-2">Track intervention outcomes and business performance</p>
+    <div className="p-6 lg:p-10 max-w-7xl mx-auto w-full space-y-8">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              Variance & Accountability
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Performance Outcomes
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+            Baseline metric tracking and 30 / 60 / 90-day intervention review milestones.
+          </p>
+        </div>
+      </div>
+
+      {/* Baseline Metric Profiles */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-[#ff5722]" />
+            <h2 className="text-base font-semibold text-white tracking-tight">Client Baseline Telemetry</h2>
+          </div>
+          <span className="text-xs text-zinc-500 font-mono">{baselines.length} Recorded Baselines</span>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500/20 to-emerald-600/30 rounded-xl flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-emerald-400" />
-              </div>
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Total Metrics</span>
-            </div>
-            <div className="text-3xl font-bold text-white">{outcomes.length}</div>
-            <div className="text-sm text-slate-400 mt-1">Tracked outcomes</div>
+        {loading ? (
+          <div className="p-12 text-center text-xs font-mono text-zinc-500">Loading outcome baselines...</div>
+        ) : baselines.length === 0 ? (
+          <div className="p-12 text-center bg-[#10121a]/80 rounded-2xl border border-white/[0.07] text-xs text-zinc-400">
+            No baseline metrics logged yet. Open any diagnosis and navigate to Baseline to establish pre-intervention KPIs.
           </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-5">
+            {baselines.map((b) => (
+              <div
+                key={b.id}
+                className="p-6 rounded-2xl bg-[#10121a]/90 border border-white/[0.07] hover:border-white/[0.15] transition-all"
+              >
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/[0.06]">
+                  <div>
+                    <h3 className="text-base font-bold text-white">
+                      {b.businesses?.business_name || 'Client Business'}
+                    </h3>
+                    <span className="text-[11px] font-mono text-zinc-500">
+                      Logged {new Date(b.recorded_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {b.session_id && (
+                    <Link
+                      href={`/dashboard/diagnoses/${b.session_id}/baseline`}
+                      className="text-xs font-medium text-[#ff5722] hover:underline"
+                    >
+                      Update Baseline
+                    </Link>
+                  )}
+                </div>
 
-          <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500/20 to-blue-600/30 rounded-xl flex items-center justify-center">
-                <BarChart3 className="h-6 w-6 text-blue-400" />
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Monthly Revenue</span>
+                    <span className="text-base font-bold font-mono text-white">{formatMoney(b.revenue)}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Net Cash Flow</span>
+                    <span className="text-base font-bold font-mono text-white">{formatMoney(b.cash_flow)}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Conversion Rate</span>
+                    <span className="text-base font-bold font-mono text-emerald-400">
+                      {b.conversion_rate ? `${b.conversion_rate}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                    <span className="text-[10px] font-mono uppercase text-zinc-500 block mb-1">Monthly Leads</span>
+                    <span className="text-base font-bold font-mono text-white">{b.leads || '—'}</span>
+                  </div>
+                </div>
               </div>
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Avg Progress</span>
-            </div>
-            <div className="text-3xl font-bold text-white">
-              {outcomes.length > 0 
-                ? `${Math.round(outcomes.reduce((sum, o) => sum + calculateProgress(o.baseline_value, o.target_value, o.current_value), 0) / outcomes.length)}%`
-                : '0%'
-              }
-            </div>
-            <div className="text-sm text-slate-400 mt-1">Overall improvement</div>
+            ))}
           </div>
+        )}
+      </div>
 
-          <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500/20 to-purple-600/30 rounded-xl flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-purple-400" />
-              </div>
-              <span className="text-xs font-medium text-slate-400 uppercase tracking-widest">Active Tracking</span>
-            </div>
-            <div className="text-3xl font-bold text-white">{outcomes.length}</div>
-            <div className="text-sm text-slate-400 mt-1">Businesses monitored</div>
+      {/* 30/60/90 Day Review Milestones */}
+      <div className="space-y-4 pt-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-[#ff5722]" />
+            <h2 className="text-base font-semibold text-white tracking-tight">Review Milestones (30/60/90 Days)</h2>
           </div>
+          <span className="text-xs text-zinc-500 font-mono">{reviews.length} Completed Reviews</span>
         </div>
 
-        <div className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-white">Loading outcomes...</div>
-          ) : outcomes.length === 0 ? (
-            <div className="p-12 text-center">
-              <TrendingUp className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400 text-lg">No outcomes tracked yet</p>
-              <p className="text-slate-500 text-sm mt-2">Complete a diagnosis and set baseline metrics to start tracking</p>
-            </div>
-          ) : (
-            <table className="min-w-full divide-y divide-white/10">
-              <thead className="bg-white/5 backdrop-blur-xl">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                    Business
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                    Metric
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                    Progress
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-widest">
-                    Last Updated
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white/5 backdrop-blur-xl divide-y divide-white/10">
-                {outcomes.map((outcome) => {
-                  const progress = calculateProgress(outcome.baseline_value, outcome.target_value, outcome.current_value)
-                  return (
-                    <tr key={outcome.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-white">
-                          {outcome.diagnostic_sessions?.businesses?.business_name || 'Unknown'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-slate-300">{outcome.metric_name}</div>
-                        <div className="text-xs text-slate-500">
-                          {outcome.baseline_value} → {outcome.target_value}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="w-24 bg-white/20 rounded-full h-2 mr-2">
-                            <div
-                              className="bg-gradient-to-r from-emerald-500 to-blue-500 h-2 rounded-full"
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium text-white">{Math.round(progress)}%</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                        {new Date(outcome.measurement_date).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </main>
+        {reviews.length === 0 && !loading && (
+          <div className="p-8 text-center bg-[#10121a]/80 rounded-2xl border border-white/[0.07] text-xs text-zinc-400">
+            Reviews will populate as intervention milestones reach 30, 60, and 90-day intervals.
+          </div>
+        )}
+
+        {reviews.length > 0 && (
+          <div className="space-y-3">
+            {reviews.map((r) => (
+              <div
+                key={r.id}
+                className="p-5 rounded-2xl bg-[#10121a]/90 border border-white/[0.07] flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-[#ff5722]/10 text-[#ff5722] border border-[#ff5722]/20 font-semibold">
+                      {r.review_type?.replace('_', ' ')}
+                    </span>
+                    <h3 className="text-sm font-bold text-white">
+                      {r.businesses?.business_name || 'Client Business'}
+                    </h3>
+                  </div>
+                  <p className="text-xs text-zinc-400 font-light">
+                    Intervention: {r.intervention_applied || 'Standard Protocol'}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <div className="text-[10px] font-mono uppercase text-zinc-500">Result</div>
+                    <div className="text-sm font-semibold text-emerald-400 font-mono">
+                      {r.result || 'Achieved'}
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono text-zinc-500">
+                    {new Date(r.review_date).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

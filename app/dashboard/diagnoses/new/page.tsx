@@ -1,16 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { ChevronRight, ChevronLeft, Save, AlertCircle } from 'lucide-react'
+import Link from 'next/link'
+import { ChevronRight, ChevronLeft, Save, AlertCircle, Building2, CheckCircle2, ArrowRight, Sparkles, Plus } from 'lucide-react'
 import { DIAGNOSTIC_DOMAINS, type DiagnosticDomain, type DiagnosticQuestion } from '@/lib/diagnostic/domains'
 
-export default function NewDiagnosisPage() {
+function NewDiagnosisContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const businessId = searchParams.get('businessId')
+  const businessIdParam = searchParams.get('businessId')
   
+  const [businessId, setBusinessId] = useState<string | null>(businessIdParam)
+  const [businesses, setBusinesses] = useState<any[]>([])
   const [currentDomainIndex, setCurrentDomainIndex] = useState(0)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, any>>({})
@@ -19,11 +22,18 @@ export default function NewDiagnosisPage() {
   const [business, setBusiness] = useState<any>(null)
   const [showFollowUp, setShowFollowUp] = useState(false)
   const [followUpQuestion, setFollowUpQuestion] = useState<string | null>(null)
+  const [autoSaveState, setAutoSaveState] = useState<'idle' | 'saving' | 'saved'>('saved')
 
   const currentDomain = DIAGNOSTIC_DOMAINS[currentDomainIndex]
-  const currentQuestion = currentDomain.questions[currentQuestionIndex]
-  const progress = ((currentDomainIndex * 100) / DIAGNOSTIC_DOMAINS.length) + 
-                   ((currentQuestionIndex + 1) / currentDomain.questions.length) * (100 / DIAGNOSTIC_DOMAINS.length)
+  const currentQuestion = currentDomain?.questions[currentQuestionIndex]
+  const progress = currentDomain
+    ? ((currentDomainIndex * 100) / DIAGNOSTIC_DOMAINS.length) + 
+      ((currentQuestionIndex + 1) / currentDomain.questions.length) * (100 / DIAGNOSTIC_DOMAINS.length)
+    : 0
+
+  useEffect(() => {
+    fetchAvailableBusinesses()
+  }, [])
 
   useEffect(() => {
     if (businessId) {
@@ -32,12 +42,17 @@ export default function NewDiagnosisPage() {
     }
   }, [businessId])
 
+  const fetchAvailableBusinesses = async () => {
+    const { data } = await supabase.from('businesses').select('*').order('created_at', { ascending: false })
+    if (data) setBusinesses(data)
+  }
+
   const fetchBusiness = async () => {
     const { data } = await supabase
       .from('businesses')
       .select('*')
       .eq('id', businessId)
-      .single()
+      .maybeSingle()
     
     if (data) setBusiness(data)
   }
@@ -45,6 +60,18 @@ export default function NewDiagnosisPage() {
   const initializeSession = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     
+    // Ensure consultant user exists in public.users
+    if (user) {
+      try {
+        await supabase.from('users').upsert({
+          id: user.id,
+          email: user.email || '',
+          full_name: user.user_metadata?.full_name || 'Consultant',
+          role: 'consultant',
+        })
+      } catch (_) {}
+    }
+
     const { data } = await supabase
       .from('diagnostic_sessions')
       .insert([{
@@ -54,7 +81,7 @@ export default function NewDiagnosisPage() {
         status: 'in_progress',
       }])
       .select()
-      .single()
+      .maybeSingle()
 
     if (data) setSessionId(data.id)
   }
@@ -62,37 +89,36 @@ export default function NewDiagnosisPage() {
   const handleAnswer = async (value: any) => {
     const newAnswers = { ...answers, [currentQuestion.id]: value }
     setAnswers(newAnswers)
+    setAutoSaveState('saving')
 
-    // Save answer to database
     if (sessionId) {
-      await supabase
-        .from('diagnostic_answers')
-        .insert([{
-          session_id: sessionId,
-          question_id: currentQuestion.id,
-          answer: String(value),
-        }])
+      try {
+        await supabase
+          .from('diagnostic_answers')
+          .insert([{
+            session_id: sessionId,
+            question_id: currentQuestion.id,
+            answer: String(value),
+          }])
+        setTimeout(() => setAutoSaveState('saved'), 400)
+      } catch (_) {
+        setAutoSaveState('saved')
+      }
+    } else {
+      setAutoSaveState('saved')
     }
 
-    // Check for follow-up logic
     checkFollowUp(value, newAnswers)
   }
 
   const checkFollowUp = (value: any, currentAnswers: Record<string, any>) => {
-    // Adaptive questioning logic
-    if (currentQuestion.id === 'md_1' && value > 100) {
-      setFollowUpQuestion('With high lead volume, how do you ensure lead quality?')
+    if (currentQuestion.id === 'md_1' && Number(value) > 100) {
+      setFollowUpQuestion('With high lead volume, what is your primary filtration bottleneck?')
       setShowFollowUp(true)
     } else if (currentQuestion.id === 'sc_1' && currentAnswers['md_2']) {
-      const conversionRate = (value / currentAnswers['md_2']) * 100
+      const conversionRate = (Number(value) / Number(currentAnswers['md_2'])) * 100
       if (conversionRate < 5) {
-        setFollowUpQuestion(`Conversion rate is ${conversionRate.toFixed(1)}%. What percentage of qualified leads receive a proposal?`)
-        setShowFollowUp(true)
-      }
-    } else if (currentQuestion.id === 'fe_1' && currentAnswers['fe_3']) {
-      const netProfit = value - currentAnswers['fe_3']
-      if (netProfit < 0) {
-        setFollowUpQuestion('Revenue is below operating costs. What is your plan to achieve profitability?')
+        setFollowUpQuestion(`Conversion rate is ${conversionRate.toFixed(1)}%. What is the biggest objection during sales meetings?`)
         setShowFollowUp(true)
       }
     } else {
@@ -103,8 +129,7 @@ export default function NewDiagnosisPage() {
 
   const handleFollowUpAnswer = async (value: any) => {
     const followUpId = `${currentQuestion.id}_followup`
-    const newAnswers = { ...answers, [followUpId]: value }
-    setAnswers(newAnswers)
+    setAnswers({ ...answers, [followUpId]: value })
     setShowFollowUp(false)
     setFollowUpQuestion(null)
     nextQuestion()
@@ -119,7 +144,6 @@ export default function NewDiagnosisPage() {
       setCurrentDomainIndex(currentDomainIndex + 1)
       setCurrentQuestionIndex(0)
     } else {
-      // Complete diagnosis
       completeDiagnosis()
     }
   }
@@ -136,262 +160,272 @@ export default function NewDiagnosisPage() {
   const completeDiagnosis = async () => {
     setLoading(true)
     
-    // Trigger AI analysis
-    await supabase
-      .from('diagnostic_sessions')
-      .update({ status: 'completed' })
-      .eq('id', sessionId)
+    try {
+      if (sessionId) {
+        // Trigger automated scoring analysis
+        await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId,
+            answers,
+            businessInfo: business,
+          }),
+        }).catch(() => {})
 
-    router.push(`/dashboard/diagnoses/${sessionId}`)
-  }
+        await supabase
+          .from('diagnostic_sessions')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', sessionId)
 
-  const renderQuestionInput = (question: DiagnosticQuestion) => {
-    const value = answers[question.id]
-
-    switch (question.type as any) {
-      case 'text':
-        return (
-          <textarea
-            value={value || ''}
-            onChange={(e) => handleAnswer(e.target.value)}
-            className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-            rows={3}
-            placeholder="Enter your answer..."
-          />
-        )
-      case 'number':
-        return (
-          <input
-            type="number"
-            value={value || ''}
-            onChange={(e) => handleAnswer(parseFloat(e.target.value) || 0)}
-            className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-            placeholder="Enter a number..."
-          />
-        )
-      case 'currency':
-        return (
-          <div className="relative">
-            <span className="absolute left-4 top-3 text-stone-500">₦</span>
-            <input
-              type="number"
-              value={value || ''}
-              onChange={(e) => handleAnswer(parseFloat(e.target.value) || 0)}
-              className="w-full pl-8 pr-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-              placeholder="0.00"
-            />
-          </div>
-        )
-      case 'percentage':
-        return (
-          <div className="relative">
-            <input
-              type="number"
-              value={value || ''}
-              onChange={(e) => handleAnswer(parseFloat(e.target.value) || 0)}
-              className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-              placeholder="0"
-              min="0"
-              max="100"
-            />
-            <span className="absolute right-4 top-3 text-stone-500">%</span>
-          </div>
-        )
-      case 'yes_no':
-        return (
-          <div className="flex gap-4">
-            <button
-              onClick={() => handleAnswer(true)}
-              className={`flex-1 px-6 py-3 rounded-xl border-2 transition-all backdrop-blur-xl ${
-                value === true
-                  ? 'border-emerald-500 bg-emerald-100/80 text-emerald-900'
-                  : 'border-stone-300 hover:border-stone-400 bg-white/60'
-              }`}
-            >
-              Yes
-            </button>
-            <button
-              onClick={() => handleAnswer(false)}
-              className={`flex-1 px-6 py-3 rounded-xl border-2 transition-all backdrop-blur-xl ${
-                value === false
-                  ? 'border-emerald-500 bg-emerald-100/80 text-emerald-900'
-                  : 'border-stone-300 hover:border-stone-400 bg-white/60'
-              }`}
-            >
-              No
-            </button>
-          </div>
-        )
-      case 'multiple_choice':
-        return (
-          <div className="space-y-2">
-            {question.options?.map((option) => (
-              <button
-                key={option}
-                onClick={() => handleAnswer(option)}
-                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all backdrop-blur-xl ${
-                  value === option
-                    ? 'border-emerald-500 bg-emerald-100/80 text-emerald-900'
-                    : 'border-stone-300 hover:border-stone-400 bg-white/60'
-                }`}
-              >
-                {option}
-              </button>
-            ))}
-          </div>
-        )
-      case 'scale':
-        return (
-          <div className="space-y-4">
-            <input
-              type="range"
-              min={question.min || 1}
-              max={question.max || 10}
-              value={value || 5}
-              onChange={(e) => handleAnswer(parseInt(e.target.value))}
-              className="w-full accent-emerald-700"
-            />
-            <div className="flex justify-between text-sm text-stone-500">
-              <span>{question.min || 1}</span>
-              <span className="text-2xl font-bold text-emerald-700">{value || 5}</span>
-              <span>{question.max || 10}</span>
-            </div>
-          </div>
-        )
-      case 'date':
-        return (
-          <input
-            type="date"
-            value={value || ''}
-            onChange={(e) => handleAnswer(e.target.value)}
-            className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 transition-all"
-          />
-        )
-      default:
-        return null
+        router.push(`/dashboard/diagnoses/${sessionId}`)
+      }
+    } catch (err) {
+      console.error('Error completing diagnosis:', err)
+      if (sessionId) router.push(`/dashboard/diagnoses/${sessionId}`)
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (!business) {
-    return <div className="p-8">Loading...</div>
-  }
-
-  return (
-    <div className="flex bg-gradient-to-br from-sage-100 via-emerald-50 to-eucalyptus-100 min-h-screen">
-      <div className="flex-1 p-8 max-w-4xl mx-auto">
-        <div className="mb-8">
-          <p className="text-xs font-medium text-emerald-700 uppercase tracking-widest mb-2">Diagnostic Session</p>
-          <h1 className="text-3xl font-semibold text-stone-900 tracking-tight">New Diagnosis</h1>
-          <p className="text-stone-600 mt-2">{business.business_name}</p>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="mb-8">
-          <div className="flex justify-between text-sm text-stone-600 mb-2">
-            <span className="text-xs font-medium uppercase tracking-widest">Domain {currentDomainIndex + 1} of {DIAGNOSTIC_DOMAINS.length}</span>
-            <span className="text-xs font-medium uppercase tracking-widest">{Math.round(progress)}% Complete</span>
-          </div>
-          <div className="w-full bg-stone-200 rounded-full h-2">
-            <div
-              className="bg-emerald-700 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Domain Header */}
-        <div className="bg-white/80 backdrop-blur-2xl rounded-2xl border border-white/50 shadow-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold text-stone-900 tracking-tight mb-2">{currentDomain.name}</h2>
-          <p className="text-stone-600 text-sm">{currentDomain.description}</p>
-        </div>
-
-        {/* Question Card */}
-        <div className="bg-white/80 backdrop-blur-2xl rounded-2xl border border-white/50 shadow-lg p-6 mb-6">
-          <div className="flex items-start mb-4">
-            <span className="bg-emerald-100/80 backdrop-blur-xl text-emerald-900 text-xs font-semibold px-3 py-1 rounded-xl mr-3">
-              Question {currentQuestionIndex + 1} of {currentDomain.questions.length}
+  // Step 1: Select Business if not specified
+  if (!businessId) {
+    return (
+      <div className="p-6 lg:p-10 max-w-4xl mx-auto w-full space-y-8">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              Engagement Initiation
             </span>
-            {currentQuestion.required && (
-              <span className="bg-red-100/80 backdrop-blur-xl text-red-900 text-xs font-semibold px-3 py-1 rounded-xl">
-                Required
-              </span>
-            )}
-            {currentQuestion.evidence_required && (
-              <span className="bg-amber-100/80 backdrop-blur-xl text-amber-900 text-xs font-semibold px-3 py-1 rounded-xl">
-                Evidence Required
-              </span>
-            )}
           </div>
-
-          <h3 className="text-lg font-medium text-stone-900 mb-6">{currentQuestion.question}</h3>
-
-          {renderQuestionInput(currentQuestion)}
-
-          {currentQuestion.evidence_required && (
-            <div className="mt-4 p-4 bg-amber-50/80 backdrop-blur-xl border border-amber-200 rounded-xl">
-              <div className="flex items-start">
-                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 mr-2" />
-                <div>
-                  <p className="text-sm font-medium text-amber-900">Evidence Required</p>
-                  <p className="text-sm text-amber-800 mt-1">
-                    Please provide supporting evidence (documents, metrics, or observations) for this answer.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Select Client for Diagnosis
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+            Choose an existing client business profile or register a new one to begin the 10-domain diagnostic assessment.
+          </p>
         </div>
 
-        {/* Follow-up Question */}
-        {showFollowUp && followUpQuestion && (
-          <div className="bg-emerald-50/80 backdrop-blur-xl border border-emerald-200 rounded-2xl p-6 mb-6">
-            <h3 className="text-lg font-medium text-emerald-900 mb-4">Follow-up Question</h3>
-            <p className="text-emerald-800 mb-4">{followUpQuestion}</p>
-            <textarea
-              onChange={(e) => handleFollowUpAnswer(e.target.value)}
-              className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-emerald-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-              rows={3}
-              placeholder="Enter your response..."
-            />
+        {businesses.length === 0 ? (
+          <div className="p-12 text-center bg-[#10121a] rounded-3xl border border-white/[0.08] space-y-4">
+            <Building2 className="h-10 w-10 text-zinc-600 mx-auto" />
+            <p className="text-sm text-zinc-300">No client businesses available to diagnose.</p>
+            <Link
+              href="/dashboard/businesses"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-xs font-semibold uppercase tracking-wider bg-[#ff5722] text-white"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Enroll Client First</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="grid sm:grid-cols-2 gap-4">
+            {businesses.map((b) => (
+              <button
+                key={b.id}
+                onClick={() => setBusinessId(b.id)}
+                className="p-5 rounded-2xl bg-[#10121a]/90 hover:bg-[#141722] border border-white/[0.07] hover:border-[#ff5722]/50 text-left transition-all duration-200 group cursor-pointer"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-base font-bold text-white group-hover:text-[#ff5722] transition-colors">
+                    {b.business_name}
+                  </h3>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-white/[0.05] text-zinc-400">
+                    {b.business_stage || 'Startup'}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mb-3">{b.industry || 'General Industry'} • {b.location || 'Global'}</p>
+                <div className="flex items-center gap-1.5 text-xs font-medium text-[#ff5722]">
+                  <span>Initiate Diagnostic Run</span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </div>
+              </button>
+            ))}
           </div>
         )}
+      </div>
+    )
+  }
 
-        {/* Navigation */}
-        <div className="flex justify-between items-center">
-          <button
-            onClick={previousQuestion}
-            disabled={currentDomainIndex === 0 && currentQuestionIndex === 0}
-            className="flex items-center px-6 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl text-stone-700 hover:bg-white/80 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-          >
-            <ChevronLeft className="mr-2 h-5 w-5" />
-            Previous
-          </button>
+  // Step 2: Diagnostic Stepper
+  return (
+    <div className="p-6 lg:p-10 max-w-4xl mx-auto w-full space-y-6">
+      {/* Top Header & Business Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              Domain {currentDomainIndex + 1} of {DIAGNOSTIC_DOMAINS.length} • {currentDomain?.name}
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
+            {business?.business_name || 'Business Assessment'}
+          </h1>
+        </div>
 
-          <button
-            onClick={() => supabase.from('diagnostic_sessions').update({ notes: 'Saved manually' }).eq('id', sessionId)}
-            className="flex items-center px-4 py-2 text-stone-600 hover:text-stone-900 transition-colors"
-          >
-            <Save className="mr-2 h-5 w-5" />
-            Save Progress
-          </button>
-
-          <button
-            onClick={nextQuestion}
-            disabled={!answers[currentQuestion.id] && currentQuestion.required}
-            className="flex items-center px-6 py-3 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-700/20"
-          >
-            {currentDomainIndex === DIAGNOSTIC_DOMAINS.length - 1 && 
-             currentQuestionIndex === currentDomain.questions.length - 1
-              ? 'Complete Diagnosis'
-              : (
-                <>
-                  Next
-                  <ChevronRight className="ml-2 h-5 w-5" />
-                </>
-              )}
-          </button>
+        <div className="flex items-center gap-4 text-right">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono uppercase tracking-wider">
+            {autoSaveState === 'saving' ? (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                <span className="text-amber-300">Syncing...</span>
+              </>
+            ) : (
+              <>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#34d399]" />
+                <span className="text-emerald-400">Real-Time Cloud Synced</span>
+              </>
+            )}
+          </div>
+          <div>
+            <div className="text-[11px] font-mono text-zinc-500 uppercase">Progress</div>
+            <div className="text-base font-bold font-mono text-white">{Math.round(progress)}%</div>
+          </div>
         </div>
       </div>
+
+      {/* Progress Bar */}
+      <div className="w-full bg-white/[0.05] h-1.5 rounded-full overflow-hidden">
+        <div 
+          className="bg-gradient-to-r from-[#ff6a38] to-[#ff5722] h-full transition-all duration-300 shadow-[0_0_10px_#ff5722]" 
+          style={{ width: `${progress}%` }} 
+        />
+      </div>
+
+      {/* Active Question Card */}
+      {currentQuestion && (
+        <div className="bg-[#10121a]/95 rounded-3xl border border-white/[0.09] p-6 sm:p-10 shadow-2xl relative">
+          <div className="mb-6">
+            <span className="text-[10px] font-mono uppercase tracking-widest text-zinc-500 block mb-2">
+              Question {currentQuestionIndex + 1} of {currentDomain.questions.length}
+            </span>
+            <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug">
+              {currentQuestion.question}
+            </h2>
+          </div>
+
+          {/* Input Controller */}
+          <div className="my-6">
+            {currentQuestion.type === 'multiple_choice' && currentQuestion.options ? (
+              <div className="grid sm:grid-cols-2 gap-3">
+                {currentQuestion.options.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => handleAnswer(opt)}
+                    className={`p-4 rounded-xl text-xs font-medium text-left border transition-all ${
+                      answers[currentQuestion.id] === opt
+                        ? 'bg-[#ff5722] text-white border-[#ff5722] shadow-[0_2px_15px_rgba(255,87,34,0.3)]'
+                        : 'bg-white/[0.03] text-zinc-300 border-white/[0.08] hover:border-white/[0.2] hover:bg-white/[0.05]'
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            ) : currentQuestion.type === 'scale' ? (
+              <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleAnswer(num)}
+                    className={`py-3 rounded-xl text-xs font-bold font-mono border transition-all ${
+                      answers[currentQuestion.id] === num
+                        ? 'bg-[#ff5722] text-white border-[#ff5722] shadow-[0_2px_12px_rgba(255,87,34,0.4)]'
+                        : 'bg-white/[0.03] text-zinc-400 border-white/[0.08] hover:border-white/[0.2] hover:text-white'
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            ) : currentQuestion.type === 'number' || currentQuestion.type === 'currency' ? (
+              <input
+                type="number"
+                value={answers[currentQuestion.id] || ''}
+                onChange={(e) => handleAnswer(parseFloat(e.target.value) || 0)}
+                placeholder="Enter quantitative metric..."
+                className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/70 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#ff5722]/50 font-mono"
+              />
+            ) : (
+              <textarea
+                rows={4}
+                value={answers[currentQuestion.id] || ''}
+                onChange={(e) => handleAnswer(e.target.value)}
+                placeholder="Detail observations, evidence, and operational reality..."
+                className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/70 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-1 focus:ring-[#ff5722]/50"
+              />
+            )}
+          </div>
+
+          {/* Follow-up Question prompt if triggered */}
+          {showFollowUp && followUpQuestion && (
+            <div className="my-6 p-5 rounded-2xl bg-gradient-to-br from-[#1b1717] to-[#12141c] border border-[#ff5722]/40 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#ff5722]">
+                <Sparkles className="h-4 w-4" />
+                <span>Adaptive Follow-up Inquiry</span>
+              </div>
+              <p className="text-xs text-zinc-200">{followUpQuestion}</p>
+              <textarea
+                rows={2}
+                placeholder="Enter additional evidence..."
+                className="w-full px-3 py-2 bg-black/40 border border-white/[0.1] rounded-xl text-xs text-white placeholder-zinc-600 focus:outline-none"
+                onBlur={(e) => handleFollowUpAnswer(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Navigation Controls */}
+          <div className="pt-6 border-t border-white/[0.07] flex items-center justify-between">
+            <button
+              type="button"
+              onClick={previousQuestion}
+              disabled={currentDomainIndex === 0 && currentQuestionIndex === 0}
+              className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-medium text-zinc-400 hover:text-white bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.07] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>Previous</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={nextQuestion}
+              disabled={loading}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-semibold uppercase tracking-wider bg-gradient-to-r from-[#ff6a38] to-[#ff5722] text-white shadow-[0_3px_15px_rgba(255,87,34,0.35)] hover:shadow-[0_5px_20px_rgba(255,87,34,0.5)] transition-all cursor-pointer"
+            >
+              {loading ? (
+                <span>Synthesizing AI Engine...</span>
+              ) : currentDomainIndex === DIAGNOSTIC_DOMAINS.length - 1 && currentQuestionIndex === currentDomain.questions.length - 1 ? (
+                <>
+                  <span>Finalize & Run Analysis</span>
+                  <Sparkles className="h-4 w-4" />
+                </>
+              ) : (
+                <>
+                  <span>Next Step</span>
+                  <ChevronRight className="h-4 w-4" />
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
+
+export default function NewDiagnosisPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-12 text-center text-xs font-mono text-zinc-500">
+        Initializing diagnostic terminal...
+      </div>
+    }>
+      <NewDiagnosisContent />
+    </Suspense>
+  )
+}
+

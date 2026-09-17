@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Save, CheckCircle } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import Link from 'next/link'
+import { ArrowLeft, Save, CheckCircle2 } from 'lucide-react'
 
 export default function BaselinePage() {
   const params = useParams()
@@ -16,6 +16,7 @@ export default function BaselinePage() {
   const [business, setBusiness] = useState<any>(null)
   const [existingBaseline, setExistingBaseline] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [savedSuccess, setSavedSuccess] = useState(false)
 
   const [formData, setFormData] = useState({
     revenue: 0,
@@ -38,7 +39,7 @@ export default function BaselinePage() {
       .from('diagnostic_sessions')
       .select('*, businesses(*)')
       .eq('id', sessionId)
-      .single()
+      .maybeSingle()
 
     if (data) {
       setSession(data)
@@ -52,7 +53,7 @@ export default function BaselinePage() {
       .from('baseline_metrics')
       .select('*')
       .eq('session_id', sessionId)
-      .single()
+      .maybeSingle()
 
     if (data) {
       setExistingBaseline(data)
@@ -72,180 +73,183 @@ export default function BaselinePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
+    setSavedSuccess(false)
 
-    if (existingBaseline) {
-      await supabase
-        .from('baseline_metrics')
-        .update(formData)
-        .eq('id', existingBaseline.id)
-    } else {
-      await supabase
-        .from('baseline_metrics')
-        .insert([{
-          business_id: business?.id,
-          session_id: sessionId,
-          ...formData,
-        }])
+    try {
+      const payload = {
+        business_id: session.business_id,
+        session_id: sessionId,
+        ...formData,
+        recorded_at: new Date().toISOString(),
+      }
+
+      if (existingBaseline) {
+        await supabase
+          .from('baseline_metrics')
+          .update(payload)
+          .eq('id', existingBaseline.id)
+      } else {
+        await supabase
+          .from('baseline_metrics')
+          .insert([payload])
+      }
+
+      setSavedSuccess(true)
+      fetchExistingBaseline()
+    } catch (err) {
+      console.error('Error saving baseline:', err)
+    } finally {
+      setSaving(false)
     }
-
-    setSaving(false)
-    router.push(`/dashboard/diagnoses/${sessionId}`)
-  }
-
-  if (loading) {
-    return <div className="p-8">Loading...</div>
   }
 
   return (
-    <div className="flex bg-gradient-to-br from-sage-100 via-emerald-50 to-eucalyptus-100 min-h-screen">
-      <div className="flex-1 p-8 max-w-4xl mx-auto">
-        <div className="mb-8">
-          <button
-            onClick={() => router.back()}
-            className="flex items-center text-stone-600 hover:text-stone-900 mb-4 transition-colors"
-          >
-            <ArrowLeft className="mr-2 h-5 w-5" />
-            Back
-          </button>
-          <p className="text-xs font-medium text-emerald-700 uppercase tracking-widest mb-2">Baseline Recording</p>
-          <h1 className="text-3xl font-semibold text-stone-900 tracking-tight">Record Baseline Metrics</h1>
-          <p className="text-stone-600 mt-2">{business?.business_name}</p>
-          <p className="text-sm text-stone-500 mt-2">
-            These metrics will be used to measure the impact of interventions over time.
-          </p>
+    <div className="p-6 lg:p-10 max-w-4xl mx-auto w-full space-y-8">
+      <div>
+        <Link
+          href={`/dashboard/diagnoses/${sessionId}`}
+          className="inline-flex items-center gap-2 text-xs font-mono text-zinc-500 hover:text-white transition-colors mb-4"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>Back to Analysis</span>
+        </Link>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/[0.07]">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+              <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+                Pre-Intervention Benchmarking
+              </span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+              Baseline Metrics
+            </h1>
+            <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+              Lock in initial KPIs for {business?.business_name || 'Client'} to measure verified 30/60/90-day improvement.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {savedSuccess && (
+        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4" />
+          <span>Baseline metrics recorded successfully. 30/60/90-day variances will track against these numbers.</span>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="bg-[#10121a] rounded-3xl border border-white/[0.08] p-6 sm:p-8 space-y-6 shadow-xl">
+        <div className="grid sm:grid-cols-2 gap-5">
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Monthly Revenue ($)
+            </label>
+            <input
+              type="number"
+              value={formData.revenue}
+              onChange={(e) => setFormData({ ...formData, revenue: parseFloat(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Monthly Operating Costs ($)
+            </label>
+            <input
+              type="number"
+              value={formData.operating_costs}
+              onChange={(e) => setFormData({ ...formData, operating_costs: parseFloat(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Net Profit ($)
+            </label>
+            <input
+              type="number"
+              value={formData.profit}
+              onChange={(e) => setFormData({ ...formData, profit: parseFloat(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Cash Flow ($)
+            </label>
+            <input
+              type="number"
+              value={formData.cash_flow}
+              onChange={(e) => setFormData({ ...formData, cash_flow: parseFloat(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Monthly Inbound Leads
+            </label>
+            <input
+              type="number"
+              value={formData.leads}
+              onChange={(e) => setFormData({ ...formData, leads: parseInt(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Conversion Rate (%)
+            </label>
+            <input
+              type="number"
+              step="0.1"
+              value={formData.conversion_rate}
+              onChange={(e) => setFormData({ ...formData, conversion_rate: parseFloat(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Average Transaction Value ($)
+            </label>
+            <input
+              type="number"
+              value={formData.average_transaction_value}
+              onChange={(e) => setFormData({ ...formData, average_transaction_value: parseFloat(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-mono uppercase tracking-wider text-zinc-400 mb-2">
+              Active Customers Count
+            </label>
+            <input
+              type="number"
+              value={formData.customers}
+              onChange={(e) => setFormData({ ...formData, customers: parseInt(e.target.value) || 0 })}
+              className="w-full px-4 py-3 bg-white/[0.03] border border-white/[0.08] focus:border-[#ff5722]/60 rounded-xl text-sm font-mono text-white focus:outline-none"
+            />
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="bg-white/80 backdrop-blur-2xl rounded-2xl border border-white/50 shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-stone-900 tracking-tight mb-4">Revenue & Customers</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Monthly Revenue
-                </label>
-                <input
-                  type="number"
-                  value={formData.revenue}
-                  onChange={(e) => setFormData({ ...formData, revenue: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Total Customers
-                </label>
-                <input
-                  type="number"
-                  value={formData.customers}
-                  onChange={(e) => setFormData({ ...formData, customers: parseInt(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Monthly Leads
-                </label>
-                <input
-                  type="number"
-                  value={formData.leads}
-                  onChange={(e) => setFormData({ ...formData, leads: parseInt(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Conversion Rate (%)
-                </label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={formData.conversion_rate}
-                  onChange={(e) => setFormData({ ...formData, conversion_rate: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white/80 backdrop-blur-2xl rounded-2xl border border-white/50 shadow-lg p-6">
-            <h2 className="text-lg font-semibold text-stone-900 tracking-tight mb-4">Financial Metrics</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Monthly Profit
-                </label>
-                <input
-                  type="number"
-                  value={formData.profit}
-                  onChange={(e) => setFormData({ ...formData, profit: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Cash Flow
-                </label>
-                <input
-                  type="number"
-                  value={formData.cash_flow}
-                  onChange={(e) => setFormData({ ...formData, cash_flow: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Average Transaction Value
-                </label>
-                <input
-                  type="number"
-                  value={formData.average_transaction_value}
-                  onChange={(e) => setFormData({ ...formData, average_transaction_value: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-stone-700 uppercase tracking-widest mb-2">
-                  Operating Costs
-                </label>
-                <input
-                  type="number"
-                  value={formData.operating_costs}
-                  onChange={(e) => setFormData({ ...formData, operating_costs: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 bg-white/60 backdrop-blur-xl border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-stone-900 placeholder-stone-400 transition-all"
-                />
-              </div>
-            </div>
-          </div>
-
-          {existingBaseline && (
-            <div className="bg-emerald-50/80 backdrop-blur-xl border border-emerald-200 rounded-xl p-4">
-              <div className="flex items-center">
-                <CheckCircle className="h-5 w-5 text-emerald-600 mr-2" />
-                <span className="text-emerald-900">
-                  Baseline already recorded on {new Date(existingBaseline.recorded_at).toLocaleDateString()}
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex items-center px-6 py-3 bg-emerald-700 text-white rounded-xl hover:bg-emerald-800 disabled:opacity-50 transition-all shadow-lg shadow-emerald-700/20"
-            >
-              {saving ? (
-                'Saving...'
-              ) : (
-                <>
-                  <Save className="mr-2 h-5 w-5" />
-                  {existingBaseline ? 'Update Baseline' : 'Record Baseline'}
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
+        <div className="pt-4 border-t border-white/[0.07] flex items-center justify-end">
+          <button
+            type="submit"
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#ff6a38] to-[#ff5722] text-white text-xs font-semibold uppercase tracking-wider shadow-md hover:shadow-lg transition-all cursor-pointer"
+          >
+            <Save className="h-4 w-4" />
+            <span>{saving ? 'Recording Telemetry...' : 'Save Baseline Telemetry'}</span>
+          </button>
+        </div>
+      </form>
     </div>
   )
 }

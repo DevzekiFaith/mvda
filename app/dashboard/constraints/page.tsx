@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import { AlertTriangle, TrendingUp, Filter } from 'lucide-react'
-import DashboardNav from '@/components/DashboardNav'
+import { AlertTriangle, TrendingUp, Filter, ExternalLink, ShieldAlert, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 
 interface Constraint {
   id: string
@@ -13,10 +13,14 @@ interface Constraint {
   severity: number
   financial_impact: number
   priority_score: number
+  symptoms?: string
+  opportunity?: string
   created_at: string
   diagnostic_sessions: {
+    id: string
     businesses: {
       business_name: string
+      industry?: string
     }
   }
 }
@@ -28,129 +32,161 @@ export default function ConstraintsPage() {
 
   useEffect(() => {
     fetchConstraints()
+
+    const channel = supabase
+      .channel('constraints-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'constraints' }, () => {
+        fetchConstraints()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const fetchConstraints = async () => {
     const { data, error } = await supabase
       .from('constraints')
-      .select('*, diagnostic_sessions(*)')
+      .select('*, diagnostic_sessions(*, businesses(*))')
       .order('priority_score', { ascending: false })
 
     if (error) {
       console.error('Error fetching constraints:', error)
     } else {
-      setConstraints(data || [])
+      setConstraints((data as any) || [])
     }
     setLoading(false)
   }
 
   const filteredConstraints = constraints.filter(c => 
-    filter === 'all' || c.constraint_type === filter
+    filter === 'all' || c.constraint_type?.toLowerCase() === filter
   )
 
-  const getSeverityColor = (severity: number) => {
-    if (severity >= 8) return 'text-red-400'
-    if (severity >= 5) return 'text-amber-400'
-    return 'text-emerald-400'
+  const getSeverityBadge = (severity: number) => {
+    if (severity >= 8) return <span className="text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded text-[11px] font-mono">Critical ({severity}/10)</span>
+    if (severity >= 5) return <span className="text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded text-[11px] font-mono">High ({severity}/10)</span>
+    return <span className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded text-[11px] font-mono">Moderate ({severity}/10)</span>
   }
 
   return (
-    <div className="flex bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen">
-      <DashboardNav />
-      <main className="flex-1 p-8">
-        <div className="mb-8">
-          <p className="text-xs font-medium text-emerald-400 uppercase tracking-widest mb-2">Business Constraints</p>
-          <h1 className="text-3xl font-semibold text-white tracking-tight">Constraints</h1>
-          <p className="text-slate-400 mt-2">Identified business constraints and bottlenecks</p>
+    <div className="p-6 lg:p-10 max-w-7xl mx-auto w-full space-y-8">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.07]">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="w-2 h-2 rounded-full bg-[#ff5722]" />
+            <span className="text-xs font-mono uppercase tracking-[0.2em] text-[#ff5722]">
+              Constraint Engine
+            </span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+            Identified Constraints
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400 font-light mt-0.5">
+            Ranked organizational bottlenecks by Severity × Impact × Evidence × Controllability.
+          </p>
         </div>
 
-        <div className="flex gap-4 mb-6">
-          <button
-            onClick={() => setFilter('all')}
-            className={`flex items-center px-4 py-2 rounded-xl backdrop-blur-xl transition-all ${
-              filter === 'all' 
-                ? 'bg-emerald-700/90 text-white' 
-                : 'bg-white/10 text-slate-400 hover:bg-white/20'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilter('primary')}
-            className={`flex items-center px-4 py-2 rounded-xl backdrop-blur-xl transition-all ${
-              filter === 'primary' 
-                ? 'bg-emerald-700/90 text-white' 
-                : 'bg-white/10 text-slate-400 hover:bg-white/20'
-            }`}
-          >
-            Primary
-          </button>
-          <button
-            onClick={() => setFilter('secondary')}
-            className={`flex items-center px-4 py-2 rounded-xl backdrop-blur-xl transition-all ${
-              filter === 'secondary' 
-                ? 'bg-emerald-700/90 text-white' 
-                : 'bg-white/10 text-slate-400 hover:bg-white/20'
-            }`}
-          >
-            Secondary
-          </button>
+        {/* Filter Pills */}
+        <div className="flex items-center gap-2 p-1 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+          {(['all', 'primary', 'secondary'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setFilter(tab)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-mono uppercase tracking-wider transition-all ${
+                filter === tab
+                  ? 'bg-[#ff5722] text-white shadow-sm'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {loading ? (
-            <div className="col-span-full text-center text-white py-12">Loading constraints...</div>
-          ) : filteredConstraints.length === 0 ? (
-            <div className="col-span-full text-center py-12">
-              <AlertTriangle className="h-12 w-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400 text-lg">No constraints found</p>
-              <p className="text-slate-500 text-sm mt-2">Complete a diagnosis to identify constraints</p>
-            </div>
-          ) : (
-            filteredConstraints.map((constraint) => (
-              <div key={constraint.id} className="bg-white/10 backdrop-blur-2xl rounded-2xl border border-white/20 shadow-lg p-6 hover:bg-white/15 transition-all">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-red-500/20 to-red-600/30 rounded-xl flex items-center justify-center">
-                    <AlertTriangle className="h-6 w-6 text-red-400" />
-                  </div>
-                  <span className={`text-2xl font-bold ${getSeverityColor(constraint.severity)}`}>
-                    {constraint.severity}/10
-                  </span>
-                </div>
-                
-                <div className="mb-4">
-                  <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
-                    constraint.constraint_type === 'primary' 
-                      ? 'bg-red-500/20 text-red-400' 
-                      : 'bg-amber-500/20 text-amber-400'
-                  }`}>
-                    {constraint.constraint_type}
-                  </span>
-                </div>
+      {/* Constraint List */}
+      {loading ? (
+        <div className="p-12 text-center text-xs font-mono text-zinc-500">Calculating constraint rankings...</div>
+      ) : filteredConstraints.length === 0 ? (
+        <div className="p-12 text-center bg-[#10121a]/80 rounded-2xl border border-white/[0.07] text-xs text-zinc-400">
+          No bottlenecks identified under this category. Run a business diagnosis to generate constraint telemetry.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredConstraints.map((c) => {
+            const businessName = c.diagnostic_sessions?.businesses?.business_name || 'Client Organization'
+            const industry = c.diagnostic_sessions?.businesses?.industry
 
-                <h3 className="text-white font-medium mb-2 line-clamp-2">{constraint.description}</h3>
-                
-                <div className="space-y-2 mt-4">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Priority Score</span>
-                    <span className="text-white font-medium">{constraint.priority_score.toFixed(2)}</span>
+            return (
+              <div
+                key={c.id}
+                className="p-6 rounded-2xl bg-[#10121a]/90 border border-white/[0.07] hover:border-white/[0.15] transition-all duration-200 shadow-sm"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded bg-[#ff5722]/10 text-[#ff5722] border border-[#ff5722]/20 font-semibold">
+                        {c.constraint_type} Bottleneck
+                      </span>
+                      <span className="text-xs text-zinc-400 font-mono">
+                        {businessName} {industry ? `• ${industry}` : ''}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-semibold text-white">
+                      {c.description}
+                    </h3>
                   </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Financial Impact</span>
-                    <span className="text-white font-medium">{constraint.financial_impact}/10</span>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <div className="text-[10px] font-mono uppercase text-zinc-500">Priority Score</div>
+                      <div className="text-lg font-bold font-mono text-white">{c.priority_score ? c.priority_score.toFixed(1) : (c.severity || '—')}</div>
+                    </div>
+                    {getSeverityBadge(c.severity || 0)}
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <p className="text-xs text-slate-500">
-                    {constraint.diagnostic_sessions?.businesses?.business_name || 'Unknown Business'}
-                  </p>
+                {/* Symptoms / Opportunity Callout */}
+                {(c.symptoms || c.opportunity) && (
+                  <div className="mt-4 pt-4 border-t border-white/[0.05] grid sm:grid-cols-2 gap-4 text-xs font-light text-zinc-400">
+                    {c.symptoms && (
+                      <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.04]">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-red-400 block mb-1">
+                          Observed Symptoms
+                        </span>
+                        <p>{c.symptoms}</p>
+                      </div>
+                    )}
+                    {c.opportunity && (
+                      <div className="bg-white/[0.02] p-3 rounded-xl border border-white/[0.04]">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 block mb-1">
+                          Economic Opportunity
+                        </span>
+                        <p>{c.opportunity}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-4 pt-3 flex items-center justify-between text-xs text-zinc-500 font-mono">
+                  <span>Logged {new Date(c.created_at).toLocaleDateString()}</span>
+                  {c.session_id && (
+                    <Link
+                      href={`/dashboard/diagnoses/${c.session_id}`}
+                      className="text-[#ff5722] hover:text-[#ff7a4d] inline-flex items-center gap-1 font-sans font-medium transition-colors"
+                    >
+                      <span>View Session Analysis</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
+                  )}
                 </div>
               </div>
-            ))
-          )}
+            )
+          })}
         </div>
-      </main>
+      )}
     </div>
   )
 }
