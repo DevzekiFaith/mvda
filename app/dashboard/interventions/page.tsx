@@ -42,27 +42,48 @@ export default function InterventionsPage() {
   }, [])
 
   const fetchInterventions = async () => {
-    const { data, error } = await supabase
-      .from('interventions')
-      .select('*, diagnostic_sessions(*, businesses(*))')
-      .order('created_at', { ascending: false })
-
-    if (error) {
-      console.error('Error fetching interventions:', error)
-    } else {
-      setInterventions((data as any) || [])
+    try {
+      const res = await fetch('/api/interventions')
+      if (res.ok) {
+        const json = await res.json()
+        setInterventions(json.interventions || [])
+      } else {
+        const { data, error } = await supabase
+          .from('interventions')
+          .select('*, diagnostic_sessions(*, businesses(*))')
+          .order('created_at', { ascending: false })
+        if (!error && data) {
+          setInterventions(data as any)
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching interventions:', err)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const updateStatus = async (id: string, newStatus: string) => {
-    const { error } = await supabase
-      .from('interventions')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('id', id)
+    // Optimistic UI update
+    const previous = [...interventions]
+    setInterventions(prev => prev.map(inv => inv.id === id ? { ...inv, status: newStatus } : inv))
 
-    if (!error) {
-      setInterventions(prev => prev.map(inv => inv.id === id ? { ...inv, status: newStatus } : inv))
+    try {
+      const res = await fetch('/api/interventions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: newStatus }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        setInterventions(previous)
+        alert(data.error || 'Failed to update intervention status.')
+      }
+    } catch (err: any) {
+      setInterventions(previous)
+      console.error('Error updating status:', err)
+      alert(err?.message || 'Error updating status.')
     }
   }
 

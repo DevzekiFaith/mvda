@@ -20,32 +20,48 @@ export async function POST(request: NextRequest) {
     const ipAddress = headersList.get('x-forwarded-for') || headersList.get('x-real-ip') || 'unknown'
     const userAgent = headersList.get('user-agent') || 'unknown'
 
+    // Ensure consultant user exists in public.users to prevent foreign key errors
+    try {
+      await supabase.from('users').upsert({
+        id: user.id,
+        email: user.email || '',
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Consultant',
+        role: 'consultant',
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' })
+    } catch (_) {}
+
     // Log the override in consultant_overrides table
-    await supabase.from('consultant_overrides').insert([{
-      consultant_id: user.id,
-      entity_type: entityType,
-      entity_id: entityId,
-      field_name: fieldName,
-      original_value: originalValue,
-      new_value: newValue,
-      reason,
-    }])
+    try {
+      await supabase.from('consultant_overrides').insert([{
+        consultant_id: user.id,
+        entity_type: entityType,
+        entity_id: entityId,
+        field_name: fieldName,
+        original_value: originalValue,
+        new_value: newValue,
+        reason,
+      }])
+    } catch (_) {}
 
     // Log the action in audit_logs table
-    await supabase.from('audit_logs').insert([{
-      user_id: user.id,
-      action: 'override',
-      entity_type: entityType,
-      entity_id: entityId,
-      changes: {
-        field: fieldName,
-        original: originalValue,
-        new: newValue,
-        reason,
-      },
-      ip_address: ipAddress,
-      user_agent: userAgent,
-    }])
+    try {
+      await supabase.from('audit_logs').insert([{
+        user_id: user.id,
+        action: 'override',
+        entity_type: entityType,
+        entity_id: entityId,
+        changes: {
+          field: fieldName,
+          original: originalValue,
+          new: newValue,
+          reason,
+        },
+        ip_address: ipAddress,
+        user_agent: userAgent,
+      }])
+    } catch (_) {}
+
 
     // Update the entity based on type
     switch (entityType) {

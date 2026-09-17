@@ -82,16 +82,20 @@ export default function BusinessesPage() {
 
     try {
       if (editingBusiness) {
-        const { error } = await supabase
-          .from('businesses')
-          .update({
+        const res = await fetch('/api/businesses', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: editingBusiness.id,
             ...formData,
             team_size: Number(formData.team_size),
-          })
-          .eq('id', editingBusiness.id)
+          }),
+        })
 
-        if (error) {
-          throw new Error(error.message)
+        const resData = await res.json()
+        if (!res.ok) {
+          const hint = resData.hint ? ` ${resData.hint}` : ''
+          throw new Error((resData.error || 'Failed to update business.') + hint)
         }
       } else {
         // Use server route for reliable auth cookie handling and foreign key verification
@@ -151,17 +155,23 @@ export default function BusinessesPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to remove this client profile?')) return
 
-    const { error } = await supabase
-      .from('businesses')
-      .delete()
-      .eq('id', id)
+    try {
+      const res = await fetch(`/api/businesses?id=${id}`, {
+        method: 'DELETE',
+      })
 
-    if (error) {
-      console.error('Error deleting business:', error)
-      return
+      const resData = await res.json()
+
+      if (!res.ok) {
+        alert(resData.error || 'Failed to delete client business profile.')
+        return
+      }
+
+      fetchBusinesses()
+    } catch (err: any) {
+      console.error('Error deleting business:', err)
+      alert(err?.message || 'An unexpected error occurred while deleting the business.')
     }
-
-    fetchBusinesses()
   }
 
   const filteredBusinesses = businesses.filter(b => 

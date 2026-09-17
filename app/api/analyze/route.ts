@@ -3,6 +3,7 @@ import { analyzeBusinessData, detectContradictions } from '@/lib/openai/client'
 import { calculateDomainScore, calculateOverallScore } from '@/lib/diagnostic/scoring'
 import { identifyConstraints } from '@/lib/diagnostic/constraints'
 import { createClient } from '@/lib/supabase/server'
+import { DIAGNOSTIC_DOMAINS } from '@/lib/diagnostic/domains'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,7 +15,24 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
 
     // Fetch existing diagnostic domains to map slug to real UUID
-    const { data: dbDomains } = await supabase.from('diagnostic_domains').select('*')
+    let { data: dbDomains } = await supabase.from('diagnostic_domains').select('*')
+
+    // Auto-seed domains if table is empty in the database
+    if (!dbDomains || dbDomains.length === 0) {
+      try {
+        const seedPayload = DIAGNOSTIC_DOMAINS.map(d => ({
+          name: d.name,
+          description: d.description,
+          weight: d.weight || 1.0,
+        }))
+        const { data: seeded } = await supabase.from('diagnostic_domains').insert(seedPayload).select('*')
+        if (seeded && seeded.length > 0) {
+          dbDomains = seeded
+        }
+      } catch (seedErr) {
+        console.warn('Could not auto-seed diagnostic domains:', seedErr)
+      }
+    }
 
     // Extract metrics from answers
     const metrics: Record<string, number> = {}
@@ -48,6 +66,7 @@ export async function POST(request: NextRequest) {
         d.name?.toLowerCase().replace(/[^a-z0-9]/g, '') === domainSlug.replace(/[^a-z0-9]/g, '')
       )
 
+
       if (matchedDomain) {
         try {
           await supabase.from('domain_scores').upsert({
@@ -79,10 +98,15 @@ export async function POST(request: NextRequest) {
       }))
     )
 
-    // Update session with overall score and completion
+    // Update session with overall score, completion, and full answers in notes
     await supabase
       .from('diagnostic_sessions')
-      .update({ overall_score: overallScore, status: 'completed', completed_at: new Date().toISOString() })
+      .update({ 
+        overall_score: overallScore, 
+        status: 'completed', 
+        completed_at: new Date().toISOString(),
+        notes: JSON.stringify(answers || {}),
+      })
       .eq('id', sessionId)
 
     // Identify constraints
@@ -139,6 +163,38 @@ export async function POST(request: NextRequest) {
       console.warn('AI analysis skipped or encountered error:', aiErr)
       aiAnalysis = {
         summary: 'Empirical diagnostic completed across 10 domains. Primary constraints identified based on weighted algorithmic scoring.',
+        recommended_interventions: [
+          {
+            title: "Two-Tier Qualification Protocol",
+            description: "Establish rigorous qualification rubric before proposal creation to preserve consultant bandwidth.",
+            priority: "high"
+          },
+          {
+            title: "Pricing Decoupling",
+            description: "Standardize core deliverables and isolate custom scope requests into distinct billable tiers.",
+            priority: "medium"
+          }
+        ]
+      }
+    }
+
+    // Auto-seed interventions into database for execution tracking
+    if (aiAnalysis?.recommended_interventions && Array.isArray(aiAnalysis.recommended_interventions)) {
+      for (const item of aiAnalysis.recommended_interventions) {
+        try {
+          await supabase.from('interventions').insert([{
+            session_id: sessionId,
+            title: item.title || 'Targeted Strategic Intervention',
+            description: item.description || '',
+            priority: (item.priority?.toLowerCase() === 'high' || item.priority?.toLowerCase() === 'medium' || item.priority?.toLowerCase() === 'low')
+              ? item.priority.toLowerCase()
+              : 'medium',
+            status: 'pending',
+            ai_generated: true,
+          }])
+        } catch (invErr) {
+          console.warn('Could not insert recommended intervention:', invErr)
+        }
       }
     }
 

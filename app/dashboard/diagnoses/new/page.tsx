@@ -18,6 +18,8 @@ function NewDiagnosisContent() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, any>>({})
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState<string | null>(null)
+  const [initializingSession, setInitializingSession] = useState(false)
   const [loading, setLoading] = useState(false)
   const [business, setBusiness] = useState<any>(null)
   const [showFollowUp, setShowFollowUp] = useState(false)
@@ -58,55 +60,39 @@ function NewDiagnosisContent() {
   }
 
   const initializeSession = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    // Ensure consultant user exists in public.users
-    if (user) {
-      try {
-        await supabase.from('users').upsert({
-          id: user.id,
-          email: user.email || '',
-          full_name: user.user_metadata?.full_name || 'Consultant',
-          role: 'consultant',
-        })
-      } catch (_) {}
+    if (!businessId) return
+    setInitializingSession(true)
+    setSessionError(null)
+
+    try {
+      const res = await fetch('/api/diagnoses/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ businessId }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) {
+        const hint = data.hint ? ` ${data.hint}` : ''
+        throw new Error((data.error || 'Failed to initialize session.') + hint)
+      }
+
+      if (data.sessionId) {
+        setSessionId(data.sessionId)
+      }
+    } catch (err: any) {
+      console.error('Session initialization error:', err)
+      setSessionError(err?.message || 'Could not start diagnostic session. Please check your connection or database.')
+    } finally {
+      setInitializingSession(false)
     }
-
-    const { data } = await supabase
-      .from('diagnostic_sessions')
-      .insert([{
-        business_id: businessId,
-        consultant_id: user?.id,
-        framework_version: '1.0',
-        status: 'in_progress',
-      }])
-      .select()
-      .maybeSingle()
-
-    if (data) setSessionId(data.id)
   }
 
   const handleAnswer = async (value: any) => {
     const newAnswers = { ...answers, [currentQuestion.id]: value }
     setAnswers(newAnswers)
     setAutoSaveState('saving')
-
-    if (sessionId) {
-      try {
-        await supabase
-          .from('diagnostic_answers')
-          .insert([{
-            session_id: sessionId,
-            question_id: currentQuestion.id,
-            answer: String(value),
-          }])
-        setTimeout(() => setAutoSaveState('saved'), 400)
-      } catch (_) {
-        setAutoSaveState('saved')
-      }
-    } else {
-      setAutoSaveState('saved')
-    }
+    setTimeout(() => setAutoSaveState('saved'), 200)
 
     checkFollowUp(value, newAnswers)
   }
@@ -159,31 +145,51 @@ function NewDiagnosisContent() {
 
   const completeDiagnosis = async () => {
     setLoading(true)
+    setSessionError(null)
     
     try {
-      if (sessionId) {
-        // Trigger automated scoring analysis
-        await fetch('/api/analyze', {
+      let activeSessionId = sessionId
+
+      // Fallback: If sessionId is not yet set, initialize now
+      if (!activeSessionId && businessId) {
+        const res = await fetch('/api/diagnoses/session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            sessionId,
-            answers,
-            businessInfo: business,
-          }),
-        }).catch(() => {})
-
-        await supabase
-          .from('diagnostic_sessions')
-          .update({ status: 'completed', completed_at: new Date().toISOString() })
-          .eq('id', sessionId)
-
-        router.push(`/dashboard/diagnoses/${sessionId}`)
+          body: JSON.stringify({ businessId }),
+        })
+        const data = await res.json()
+        if (data.sessionId) {
+          activeSessionId = data.sessionId
+          setSessionId(activeSessionId)
+        } else {
+          throw new Error(data.error || 'Could not initialize session record before running analysis.')
+        }
       }
-    } catch (err) {
+
+      if (!activeSessionId) {
+        throw new Error('No active session found. Please reload and select a business.')
+      }
+
+      // Trigger automated scoring analysis and data persistence
+      const analyzeRes = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: activeSessionId,
+          answers,
+          businessInfo: business,
+        }),
+      })
+
+      if (!analyzeRes.ok) {
+        const errData = await analyzeRes.json().catch(() => ({}))
+        console.warn('Analyze warning:', errData)
+      }
+
+      router.push(`/dashboard/diagnoses/${activeSessionId}`)
+    } catch (err: any) {
       console.error('Error completing diagnosis:', err)
-      if (sessionId) router.push(`/dashboard/diagnoses/${sessionId}`)
-    } finally {
+      setSessionError(err?.message || 'Error completing diagnostic analysis. Please try again.')
       setLoading(false)
     }
   }
@@ -285,6 +291,23 @@ function NewDiagnosisContent() {
           </div>
         </div>
       </div>
+
+      {sessionError && (
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+            <span className="font-medium">{sessionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={initializeSession}
+            disabled={initializingSession}
+            className="px-4 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-200 rounded-xl font-mono text-[11px] uppercase tracking-wider transition-all self-start sm:self-auto cursor-pointer"
+          >
+            {initializingSession ? 'Syncing...' : 'Retry Session'}
+          </button>
+        </div>
+      )}
 
       {/* Progress Bar */}
       <div className="w-full bg-white/[0.05] h-1.5 rounded-full overflow-hidden">

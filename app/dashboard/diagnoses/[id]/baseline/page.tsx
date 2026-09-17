@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Save, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Save, CheckCircle2, AlertCircle } from 'lucide-react'
 
 export default function BaselinePage() {
   const params = useParams()
@@ -17,6 +17,7 @@ export default function BaselinePage() {
   const [existingBaseline, setExistingBaseline] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [savedSuccess, setSavedSuccess] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     revenue: 0,
@@ -74,30 +75,31 @@ export default function BaselinePage() {
     e.preventDefault()
     setSaving(true)
     setSavedSuccess(false)
+    setErrorMessage(null)
 
     try {
-      const payload = {
-        business_id: session.business_id,
-        session_id: sessionId,
-        ...formData,
-        recorded_at: new Date().toISOString(),
-      }
+      const res = await fetch('/api/baseline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId,
+          businessId: session?.business_id,
+          ...formData,
+        }),
+      })
 
-      if (existingBaseline) {
-        await supabase
-          .from('baseline_metrics')
-          .update(payload)
-          .eq('id', existingBaseline.id)
-      } else {
-        await supabase
-          .from('baseline_metrics')
-          .insert([payload])
+      const resData = await res.json()
+
+      if (!res.ok) {
+        const hint = resData.hint ? ` ${resData.hint}` : ''
+        throw new Error((resData.error || 'Failed to save baseline metrics.') + hint)
       }
 
       setSavedSuccess(true)
       fetchExistingBaseline()
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving baseline:', err)
+      setErrorMessage(err?.message || 'Failed to record baseline telemetry. Please check database permissions.')
     } finally {
       setSaving(false)
     }
@@ -131,6 +133,13 @@ export default function BaselinePage() {
           </div>
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2.5 shadow-lg">
+          <AlertCircle className="h-4 w-4 shrink-0 text-red-400" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
       {savedSuccess && (
         <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
