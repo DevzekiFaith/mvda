@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, Eye, EyeOff, Lock, Mail, User as UserIcon, CheckCircle2 } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Lock, Mail, User as UserIcon, CheckCircle2, AlertTriangle } from 'lucide-react'
+
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -23,36 +24,39 @@ export default function SignupPage() {
     setSuccessMessage('')
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            full_name: fullName.trim(),
-          },
-        },
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          fullName: fullName.trim(),
+        }),
       })
 
-      if (signUpError) {
-        setError(signUpError.message)
+      const resData = await res.json()
+
+      if (!res.ok) {
+        setError(resData.error || 'Registration failed. Please try again.')
         setLoading(false)
         return
       }
 
-      if (data.session) {
-        // Automatically sync to public.users
-        try {
-          await supabase.from('users').upsert({
-            id: data.user?.id,
-            email: email.trim(),
-            full_name: fullName.trim(),
-            role: 'consultant',
-          })
-        } catch (_) {}
-
+      if (resData.hasSession) {
+        // Also synchronize client-side session if available
+        if (isSupabaseConfigured) {
+          try {
+            await supabase.auth.signInWithPassword({
+              email: email.trim(),
+              password,
+            })
+          } catch (_) {}
+        }
         window.location.href = '/dashboard'
-      } else if (data.user) {
-        setSuccessMessage('Account created! Please check your email to verify your address, then sign in.')
+      } else {
+        setSuccessMessage(
+          'Account created successfully! If email confirmation is enabled on your Supabase project, please check your inbox to verify before signing in.'
+        )
         setLoading(false)
       }
     } catch (err: any) {
@@ -60,6 +64,7 @@ export default function SignupPage() {
       setLoading(false)
     }
   }
+
 
   return (
     <div className="min-h-screen bg-[#090a0f] text-[#f4f4f6] relative flex items-center justify-center p-4 overflow-hidden antialiased">
@@ -103,6 +108,18 @@ export default function SignupPage() {
               Register as an accredited consultant to initiate enterprise business diagnoses.
             </p>
           </div>
+
+          {!isSupabaseConfigured && (
+            <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start gap-3">
+              <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold text-amber-200">Supabase Credentials Not Found</p>
+                <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                  Ensure <code className="bg-black/30 px-1 py-0.5 rounded text-amber-200 font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and <code className="bg-black/30 px-1 py-0.5 rounded text-amber-200 font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> are configured in your Vercel Project Settings &gt; Environment Variables.
+                </p>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="mb-6 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">

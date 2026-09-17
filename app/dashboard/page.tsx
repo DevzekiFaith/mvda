@@ -51,7 +51,7 @@ export default function DashboardPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'interventions' }, () => {
         fetchDashboardData()
       })
-      .subscribe((status) => {
+      .subscribe((status: string) => {
         setIsLive(status === 'SUBSCRIBED')
       })
 

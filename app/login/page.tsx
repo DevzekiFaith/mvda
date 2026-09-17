@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { ArrowRight, Eye, EyeOff, Lock, Mail, AlertTriangle } from 'lucide-react'
 
 function LoginForm() {
   const [email, setEmail] = useState('')
@@ -21,23 +21,33 @@ function LoginForm() {
     setError('')
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+      // 1. Authenticate via server-side route to guarantee HttpOnly cookie propagation
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
       })
 
-      if (signInError) {
-        setError(signInError.message)
+      const resData = await res.json()
+
+      if (!res.ok) {
+        setError(resData.error || 'Authentication failed. Please check your credentials.')
         setLoading(false)
         return
       }
 
-      if (data.session) {
-        window.location.href = redirectedFrom
-      } else {
-        setError('Authentication succeeded but session could not be established. Please retry.')
-        setLoading(false)
+      // 2. Also synchronize client-side session if browser client is configured
+      if (isSupabaseConfigured) {
+        try {
+          await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          })
+        } catch (_) {}
       }
+
+      // 3. Navigate to protected destination
+      window.location.href = redirectedFrom
     } catch (err: any) {
       setError(err?.message || 'An unexpected error occurred. Please try again.')
       setLoading(false)
@@ -57,12 +67,25 @@ function LoginForm() {
         </p>
       </div>
 
+      {!isSupabaseConfigured && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start gap-3">
+          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-semibold text-amber-200">Supabase Credentials Not Found</p>
+            <p className="text-[11px] text-amber-300/80 leading-relaxed">
+              Ensure <code className="bg-black/30 px-1 py-0.5 rounded text-amber-200 font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and <code className="bg-black/30 px-1 py-0.5 rounded text-amber-200 font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> are configured in your Vercel Project Settings &gt; Environment Variables.
+            </p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="mb-6 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
           <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 mt-1.5" />
           <span>{error}</span>
         </div>
       )}
+
 
       <form onSubmit={handleLogin} className="space-y-5">
         <div>
