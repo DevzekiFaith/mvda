@@ -25,6 +25,8 @@ export default function BusinessesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [modalError, setModalError] = useState<string | null>(null)
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -69,55 +71,69 @@ export default function BusinessesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setModalError(null)
 
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (editingBusiness) {
-      const { error } = await supabase
-        .from('businesses')
-        .update({
-          ...formData,
-          team_size: Number(formData.team_size),
-        })
-        .eq('id', editingBusiness.id)
-
-      if (error) {
-        console.error('Error updating business:', error)
-        return
-      }
-    } else {
-      const { error } = await supabase
-        .from('businesses')
-        .insert([{ 
-          ...formData, 
-          team_size: Number(formData.team_size),
-          assigned_consultant_id: user?.id || null,
-          status: 'intake' 
-        }])
-
-      if (error) {
-        console.error('Error creating business:', error)
-        return
-      }
+    if (!formData.business_name.trim()) {
+      setModalError('Business Name is required.')
+      return
     }
 
-    setShowModal(false)
-    setEditingBusiness(null)
-    setFormData({
-      business_name: '',
-      industry: '',
-      location: '',
-      website: '',
-      founder_contact: '',
-      business_stage: 'startup',
-      team_size: 1,
-      revenue_range: '0-100k',
-    })
-    fetchBusinesses()
+    setSubmitting(true)
+
+    try {
+      if (editingBusiness) {
+        const { error } = await supabase
+          .from('businesses')
+          .update({
+            ...formData,
+            team_size: Number(formData.team_size),
+          })
+          .eq('id', editingBusiness.id)
+
+        if (error) {
+          throw new Error(error.message)
+        }
+      } else {
+        // Use server route for reliable auth cookie handling and foreign key verification
+        const res = await fetch('/api/businesses', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+
+        const resData = await res.json()
+
+        if (!res.ok) {
+          const hint = resData.hint ? ` ${resData.hint}` : ''
+          throw new Error((resData.error || 'Failed to create business.') + hint)
+        }
+      }
+
+      setShowModal(false)
+      setEditingBusiness(null)
+      setFormData({
+        business_name: '',
+        industry: '',
+        location: '',
+        website: '',
+        founder_contact: '',
+        business_stage: 'startup',
+        team_size: 1,
+        revenue_range: '0-100k',
+      })
+      await fetchBusinesses()
+    } catch (err: any) {
+      console.error('Business submission error:', err)
+      setModalError(err?.message || 'Failed to save business record.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleEdit = (business: Business) => {
     setEditingBusiness(business)
+    setModalError(null)
+    setSubmitting(false)
     setFormData({
       business_name: business.business_name,
       industry: business.industry || '',
@@ -130,6 +146,7 @@ export default function BusinessesPage() {
     })
     setShowModal(true)
   }
+
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to remove this client profile?')) return
@@ -298,8 +315,14 @@ export default function BusinessesPage() {
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-[#10121a] border border-white/[0.1] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative">
             <button
-              onClick={() => setShowModal(false)}
-              className="absolute top-6 right-6 p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.05]"
+              onClick={() => {
+                if (!submitting) {
+                  setShowModal(false)
+                  setModalError(null)
+                }
+              }}
+              disabled={submitting}
+              className="absolute top-6 right-6 p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.05] disabled:opacity-50"
             >
               <X className="h-5 w-5" />
             </button>
@@ -312,6 +335,16 @@ export default function BusinessesPage() {
                 {editingBusiness ? 'Edit Client Business' : 'Register Client Business'}
               </h2>
             </div>
+
+            {modalError && (
+              <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0 mt-1.5" />
+                <div className="space-y-1">
+                  <p className="font-semibold text-red-300">Enrollment Error</p>
+                  <p className="leading-relaxed">{modalError}</p>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -421,16 +454,26 @@ export default function BusinessesPage() {
               <div className="pt-4 flex items-center justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-zinc-400 hover:text-white"
+                  disabled={submitting}
+                  onClick={() => {
+                    setShowModal(false)
+                    setModalError(null)
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-xs font-medium text-zinc-400 hover:text-white disabled:opacity-50 cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#ff5722] hover:bg-[#ff6e3a] text-white text-xs font-semibold shadow-sm"
+                  disabled={submitting}
+                  className="px-5 py-2.5 rounded-xl bg-[#ff5722] hover:bg-[#ff6e3a] disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold shadow-sm transition-all flex items-center gap-2 cursor-pointer"
                 >
-                  {editingBusiness ? 'Save Changes' : 'Enroll Business'}
+                  {submitting && (
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  )}
+                  {submitting 
+                    ? (editingBusiness ? 'Saving...' : 'Enrolling...') 
+                    : (editingBusiness ? 'Save Changes' : 'Enroll Business')}
                 </button>
               </div>
             </form>
